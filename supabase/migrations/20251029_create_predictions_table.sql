@@ -53,3 +53,4 @@ CREATE TRIGGER trigger_update_predictions_updated_at
 -- Add helpful comment
 COMMENT ON TABLE predictions IS 'Stores AI-generated predictions for NFL games with betting recommendations';
 
+

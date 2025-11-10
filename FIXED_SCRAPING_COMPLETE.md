@@ -342,3 +342,4 @@ After running the sync:
 
 **Test it now and see accurate Cardinals stats: ~23 PPG, not 400+!** 🎯
 
+

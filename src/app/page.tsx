@@ -1,13 +1,56 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BestBetsDisplay } from '@/components/BestBetsDisplay';
 import { PlayerPropsDisplay } from '@/components/PlayerPropsDisplay';
+import { GameResultsDisplay } from '@/components/GameResultsDisplay';
+import { TotalsDisplay } from '@/components/TotalsDisplay';
 
-type TabType = 'spreads' | 'player-props';
+type TabType = 'spreads' | 'totals' | 'player-props' | 'results';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('spreads');
+  const [record, setRecord] = useState({ wins: 0, losses: 0, pushes: 0 });
+  const [betOfWeekRecord, setBetOfWeekRecord] = useState({ wins: 0, losses: 0, pushes: 0 });
+
+  // Fetch overall record for header (recommended bets only)
+  const fetchRecord = async () => {
+    try {
+      const response = await fetch('/api/game-results?season=2025&calculateRecord=true');
+      const data = await response.json();
+      if (data.success && data.record) {
+        setRecord(data.record);
+      }
+    } catch (error) {
+      console.error('Error fetching record:', error);
+    }
+  };
+
+  // Fetch "Bet of the Week" record (only #1 picks)
+  const fetchBetOfWeekRecord = async () => {
+    try {
+      const response = await fetch('/api/game-results?season=2025&calculateRecord=true&topPickOnly=true');
+      const data = await response.json();
+      if (data.success && data.record) {
+        setBetOfWeekRecord(data.record);
+      }
+    } catch (error) {
+      console.error('Error fetching bet of week record:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchRecord();
+    fetchBetOfWeekRecord();
+  }, []);
+
+  // Refresh record when viewing results tab
+  useEffect(() => {
+    if (activeTab === 'results') {
+      fetchRecord();
+      fetchBetOfWeekRecord();
+    }
+  }, [activeTab]);
 
   return (
     <main className="min-h-screen bg-[#0f1419] text-white p-8">
@@ -32,16 +75,53 @@ export default function Home() {
             <h1 className="text-4xl font-bold">Best Bets</h1>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-[#1a1f2e] px-4 py-2 rounded-lg border border-gray-700">
-              <span className="text-sm font-semibold text-gray-400">Record</span>
-              <span className="text-lg font-bold text-white">0-0-0</span>
+            {/* Bet of the Week Record */}
+            <div className="flex flex-col gap-1 bg-[#1a1f2e] px-4 py-2 rounded-lg border-2 border-yellow-500 shadow-lg shadow-yellow-500/20">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-yellow-400">Bet of the Week</span>
+                <span className="text-lg font-bold text-white">
+                  {betOfWeekRecord.wins}-{betOfWeekRecord.losses}-{betOfWeekRecord.pushes}
+                </span>
+              </div>
+              <div className="text-xs text-gray-400">
+                Win Rate: <span className={`font-semibold ${
+                  betOfWeekRecord.wins + betOfWeekRecord.losses > 0
+                    ? (() => {
+                        const winRate = (betOfWeekRecord.wins / (betOfWeekRecord.wins + betOfWeekRecord.losses)) * 100;
+                        return winRate >= 60 ? 'text-green-400' : winRate >= 45 ? 'text-yellow-400' : 'text-red-400';
+                      })()
+                    : 'text-gray-400'
+                }`}>
+                  {betOfWeekRecord.wins + betOfWeekRecord.losses > 0
+                    ? ((betOfWeekRecord.wins / (betOfWeekRecord.wins + betOfWeekRecord.losses)) * 100).toFixed(1)
+                    : '0.0'}%
+                </span>
+              </div>
             </div>
-            <button className="flex items-center gap-2 bg-[#1a1f2e] px-6 py-3 rounded-lg border border-gray-700">
-              <span className="text-lg">NFL Week 9 — 11/4</span>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+            
+            {/* Overall Record */}
+            <div className="flex flex-col gap-1 bg-[#1a1f2e] px-4 py-2 rounded-lg border-2 border-blue-500 shadow-lg shadow-blue-500/20">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-blue-400">Overall Record</span>
+                <span className="text-lg font-bold text-white">
+                  {record.wins}-{record.losses}-{record.pushes}
+                </span>
+              </div>
+              <div className="text-xs text-gray-400">
+                Win Rate: <span className={`font-semibold ${
+                  record.wins + record.losses > 0
+                    ? (() => {
+                        const winRate = (record.wins / (record.wins + record.losses)) * 100;
+                        return winRate >= 60 ? 'text-green-400' : winRate >= 45 ? 'text-yellow-400' : 'text-red-400';
+                      })()
+                    : 'text-gray-400'
+                }`}>
+                  {record.wins + record.losses > 0
+                    ? ((record.wins / (record.wins + record.losses)) * 100).toFixed(1)
+                    : '0.0'}%
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -54,31 +134,56 @@ export default function Home() {
         </div>
 
         {/* Category Tab */}
-        <div className="flex gap-8 mb-8 border-b border-gray-700">
+        <div className="flex justify-between mb-8 border-b border-gray-700">
+          <div className="flex gap-8">
+            <button 
+              onClick={() => setActiveTab('spreads')}
+              className={`pb-4 text-lg font-medium transition-colors ${
+                activeTab === 'spreads' 
+                  ? 'text-[#22c55e] border-b-2 border-[#22c55e]' 
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Spreads
+            </button>
+            <button 
+              onClick={() => setActiveTab('totals')}
+              className={`pb-4 text-lg font-medium transition-colors ${
+                activeTab === 'totals' 
+                  ? 'text-[#22c55e] border-b-2 border-[#22c55e]' 
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Total O/U
+            </button>
+            <button 
+              onClick={() => setActiveTab('player-props')}
+              className={`pb-4 text-lg font-medium transition-colors ${
+                activeTab === 'player-props' 
+                  ? 'text-[#22c55e] border-b-2 border-[#22c55e]' 
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Player Props
+            </button>
+          </div>
           <button 
-            onClick={() => setActiveTab('spreads')}
+            onClick={() => setActiveTab('results')}
             className={`pb-4 text-lg font-medium transition-colors ${
-              activeTab === 'spreads' 
+              activeTab === 'results' 
                 ? 'text-[#22c55e] border-b-2 border-[#22c55e]' 
                 : 'text-gray-400 hover:text-gray-200'
             }`}
           >
-            Spreads
-          </button>
-          <button 
-            onClick={() => setActiveTab('player-props')}
-            className={`pb-4 text-lg font-medium transition-colors ${
-              activeTab === 'player-props' 
-                ? 'text-[#22c55e] border-b-2 border-[#22c55e]' 
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            Player Props
+            Results
           </button>
         </div>
 
-        {/* AI Best Bets Predictions */}
-        {activeTab === 'spreads' ? <BestBetsDisplay /> : <PlayerPropsDisplay />}
+        {/* Content */}
+        {activeTab === 'spreads' && <BestBetsDisplay />}
+        {activeTab === 'totals' && <TotalsDisplay />}
+        {activeTab === 'player-props' && <PlayerPropsDisplay />}
+        {activeTab === 'results' && <GameResultsDisplay />}
       </div>
     </main>
   );

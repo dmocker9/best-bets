@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface TeamStats {
   team_name: string;
@@ -53,13 +53,21 @@ export function BestBetsDisplay() {
   const [result, setResult] = useState<BestBetsResponse | null>(null);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [showGlossary, setShowGlossary] = useState(false);
+  const [selectedWeek, setSelectedWeek] = useState<number>(10);
+  const [selectedSeason, setSelectedSeason] = useState<number>(2025);
 
-  const fetchBestBets = async () => {
+  const fetchBestBets = useCallback(async () => {
     setLoading(true);
     setResult(null);
 
     try {
-      const response = await fetch('/api/best-bets?limit=5');
+      const params = new URLSearchParams({ 
+        limit: '5', 
+        week: selectedWeek.toString(), 
+        season: selectedSeason.toString(), 
+        type: 'spreads' 
+      });
+      const response = await fetch(`/api/best-bets?${params.toString()}`);
       const data = await response.json();
       console.log('Fetched predictions:', data.predictions);
       console.log('First prediction has stats?', data.predictions[0]?.home_stats ? 'Yes' : 'No');
@@ -76,12 +84,12 @@ export function BestBetsDisplay() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedWeek, selectedSeason]);
 
-  // Automatically fetch best bets on component mount
+  // Automatically fetch best bets on component mount or when filters change
   useEffect(() => {
     fetchBestBets();
-  }, []);
+  }, [fetchBestBets]);
 
   const toggleExpanded = (gameId: string) => {
     console.log('Toggling expansion for game:', gameId);
@@ -100,30 +108,41 @@ export function BestBetsDisplay() {
   };
 
   const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 80) return 'text-green-400';
-    if (confidence >= 60) return 'text-yellow-400';
+    if (confidence >= 70) return 'text-green-400';
+    if (confidence >= 50) return 'text-yellow-400';
     return 'text-orange-400';
   };
 
   const getConfidenceBadge = (confidence: number) => {
-    if (confidence >= 80) return 'bg-green-900/30 border-green-700';
-    if (confidence >= 60) return 'bg-yellow-900/30 border-yellow-700';
+    if (confidence >= 70) return 'bg-green-900/30 border-green-700';
+    if (confidence >= 50) return 'bg-yellow-900/30 border-yellow-700';
     return 'bg-orange-900/30 border-orange-700';
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-white">🎯 Best Bets NFL Week 9</h2>
-        {loading && (
-          <div className="flex items-center gap-2 text-gray-400">
-            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span className="text-sm">Loading predictions...</span>
-          </div>
-        )}
+        <h2 className="text-2xl font-bold text-white">🎯 Best Bets NFL Week {selectedWeek}</h2>
+        <div className="flex items-center gap-4">
+          <select
+            value={selectedWeek}
+            onChange={(e) => setSelectedWeek(parseInt(e.target.value))}
+            className="bg-[#1a1f2e] text-white px-4 py-2 rounded-lg border border-gray-700"
+          >
+            {Array.from({ length: 18 }, (_, i) => i + 1).map((week) => (
+              <option key={week} value={week}>Week {week}</option>
+            ))}
+          </select>
+          {loading && (
+            <div className="flex items-center gap-2 text-gray-400">
+              <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span className="text-sm">Loading...</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Decorative Banner */}
@@ -215,8 +234,8 @@ export function BestBetsDisplay() {
                             fill="none"
                             strokeDasharray={`${2 * Math.PI * 24}`}
                             strokeDashoffset={`${2 * Math.PI * 24 * (1 - prediction.confidence_score / 100)}`}
-                            className={prediction.confidence_score >= 80 ? 'text-green-400' : 
-                                      prediction.confidence_score >= 65 ? 'text-yellow-400' : 'text-orange-400'}
+                            className={prediction.confidence_score >= 70 ? 'text-green-400' : 
+                                      prediction.confidence_score >= 50 ? 'text-yellow-400' : 'text-orange-400'}
                             strokeLinecap="round"
                           />
                         </svg>
@@ -313,13 +332,13 @@ export function BestBetsDisplay() {
                             <div className="flex items-start gap-2">
                               <span className="text-purple-400 font-semibold min-w-[140px]">Confidence Level:</span>
                               <span className={`font-bold ${
-                                prediction.confidence_score >= 75 ? 'text-green-400' : 
-                                prediction.confidence_score >= 65 ? 'text-yellow-400' : 'text-orange-400'
+                                prediction.confidence_score >= 70 ? 'text-green-400' : 
+                                prediction.confidence_score >= 50 ? 'text-yellow-400' : 'text-orange-400'
                               }`}>
                                 {prediction.confidence_score.toFixed(0)}%
-                                {prediction.confidence_score >= 75 && <span className="text-green-400 ml-1">(STRONG BET)</span>}
-                                {prediction.confidence_score >= 65 && prediction.confidence_score < 75 && <span className="text-yellow-400 ml-1">(GOOD BET)</span>}
-                                {prediction.confidence_score < 65 && <span className="text-orange-400 ml-1">(VALUE BET)</span>}
+                                {prediction.confidence_score >= 70 && <span className="text-green-400 ml-1">(STRONG BET)</span>}
+                                {prediction.confidence_score >= 50 && prediction.confidence_score < 70 && <span className="text-yellow-400 ml-1">(GOOD BET)</span>}
+                                {prediction.confidence_score < 50 && <span className="text-orange-400 ml-1">(VALUE BET)</span>}
                               </span>
                             </div>
                           </div>
@@ -483,21 +502,21 @@ export function BestBetsDisplay() {
                                            (prediction.away_stats.offensive_rating + prediction.away_stats.defensive_rating)).toFixed(1)}
                                 </span></div>
                                 <div>• Confidence: <span className={`font-bold ${
-                                  prediction.confidence_score >= 75 ? 'text-green-400' : 
-                                  prediction.confidence_score >= 65 ? 'text-yellow-400' : 'text-orange-400'
+                                  prediction.confidence_score >= 70 ? 'text-green-400' : 
+                                  prediction.confidence_score >= 50 ? 'text-yellow-400' : 'text-orange-400'
                                 }`}>
                                   {prediction.confidence_score.toFixed(0)}%
                                 </span></div>
                                 <div className={`mt-2 p-2 rounded border ${
-                                  prediction.confidence_score >= 75 ? 'bg-green-900/20 border-green-700' : 
-                                  prediction.confidence_score >= 65 ? 'bg-yellow-900/20 border-yellow-700' : 'bg-orange-900/20 border-orange-700'
+                                  prediction.confidence_score >= 70 ? 'bg-green-900/20 border-green-700' : 
+                                  prediction.confidence_score >= 50 ? 'bg-yellow-900/20 border-yellow-700' : 'bg-orange-900/20 border-orange-700'
                                 }`}>
                                   <span className={`font-bold text-xs uppercase ${
-                                    prediction.confidence_score >= 75 ? 'text-green-300' : 
-                                    prediction.confidence_score >= 65 ? 'text-yellow-300' : 'text-orange-300'
+                                    prediction.confidence_score >= 70 ? 'text-green-300' : 
+                                    prediction.confidence_score >= 50 ? 'text-yellow-300' : 'text-orange-300'
                                   }`}>
-                                    {prediction.confidence_score >= 75 ? '✓ High Confidence - Strong Betting Opportunity' : 
-                                     prediction.confidence_score >= 65 ? '○ Moderate Confidence - Good Betting Opportunity' : '◇ Value Play - Consider With Caution'}
+                                    {prediction.confidence_score >= 70 ? '✓ High Confidence - Strong Betting Opportunity' : 
+                                     prediction.confidence_score >= 50 ? '○ Moderate Confidence - Good Betting Opportunity' : '◇ Value Play - Consider With Caution'}
                                   </span>
                                 </div>
                               </div>

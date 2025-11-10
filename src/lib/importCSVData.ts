@@ -103,36 +103,38 @@ export async function importCSVTeamData(
         console.log(`   PPG: ${ppg.toFixed(2)} | PA/G: ${pag.toFixed(2)}`);
         console.log(`   Ratings: Off ${osrs.toFixed(2)} | Def ${dsrs.toFixed(2)} | SoS ${sos.toFixed(2)}`);
 
-        // Build stats object - only include CSV data
-        const stats: Partial<NFLTeamStats> = {
+        // Build stats object for auto_nfl_team_stats table
+        // Note: points_per_game will be auto-calculated by database trigger
+        const stats = {
           team_name: teamName,
-          week_number: weekNumber,
-          season_year: seasonYear,
+          week: weekNumber,
+          season: seasonYear,
           
           // Basic record
           wins,
           losses,
           ties,
-          win_loss_record: `${wins}-${losses}-${ties}`,
           win_percentage: winPct,
           
-          // Scoring stats
-          points_per_game: ppg,
-          points_allowed_per_game: pag,
+          // Scoring stats (store as season totals)
+          // points_per_game and points_allowed_per_game are auto-calculated by trigger
+          points_for: pointsFor,
+          points_against: pointsAgainst,
           point_differential: pointDiff,
           margin_of_victory: mov,
           
-          // Advanced metrics
+          // Advanced metrics (map to SRS column names)
           strength_of_schedule: sos,
-          offensive_rating: osrs,
-          defensive_rating: dsrs,
+          srs: srs,
+          offensive_srs: osrs,
+          defensive_srs: dsrs,
         };
 
-        // Upsert to database
+        // Upsert to auto_nfl_team_stats table
         const { error } = await supabase
-          .from('nfl_team_stats')
+          .from('auto_nfl_team_stats')
           .upsert(stats, {
-            onConflict: 'team_name,week_number,season_year',
+            onConflict: 'team_name,season,week',
             ignoreDuplicates: false,
           });
 

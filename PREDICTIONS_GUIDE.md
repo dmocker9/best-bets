@@ -247,3 +247,4 @@ ORDER BY week_number;
 2. Generate predictions for the current week
 3. Check out the Best Bets in your UI!
 
+

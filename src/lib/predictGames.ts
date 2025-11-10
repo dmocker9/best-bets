@@ -323,7 +323,7 @@ export async function predictGame(game: GameOdds): Promise<GamePrediction | null
     
     // Check if division game (games between divisional rivals are typically closer)
     const isDivisionGame = areDivisionRivals(game.home_team, game.away_team);
-    const DIVISION_GAME_DAMPENING = 0.80; // 20% reduction for division games
+    const DIVISION_GAME_DAMPENING = 0.90; // 10% reduction for division games (reduced from 20%)
     
     // Predicted spread: Positive = home team favored
     let predictedMargin = srsDifferential + HOME_FIELD_ADVANTAGE;
@@ -335,8 +335,18 @@ export async function predictGame(game: GameOdds): Promise<GamePrediction | null
     
     const predictedWinner = predictedMargin > 0 ? game.home_team : game.away_team;
     
-    // Parse current spread
-    const currentSpread = parseFloat(game.home_spread.replace('+', ''));
+    // Parse current spread (defensive: handle null/undefined/empty)
+    let currentSpread = 0;
+    try {
+      if (game.home_spread != null) {
+        const raw = String(game.home_spread);
+        const cleaned = raw.replace(/[^0-9+\-.]/g, '').replace('+', '');
+        const parsed = parseFloat(cleaned);
+        if (!Number.isNaN(parsed)) currentSpread = parsed;
+      }
+    } catch (_) {
+      currentSpread = 0; // fallback to pick winner logic; value comparison still works
+    }
     
     // Calculate sophisticated confidence score
     const confidence = calculateConfidence(
@@ -498,7 +508,8 @@ export async function savePrediction(
       false
     );
     
-    const { error } = await supabase
+    // Try primary table 'predictions'; if missing, fallback to 'spread_predictions'
+    let { error } = await supabase
       .from('predictions')
       .upsert({
         game_id: prediction.game_id,
@@ -516,7 +527,30 @@ export async function savePrediction(
         onConflict: 'game_id,week_number,season',
         ignoreDuplicates: false,
       });
-    
+
+    if (error && (error as any).code === 'PGRST205') {
+      // Fallback table name
+      const fallback = await supabase
+        .from('spread_predictions')
+        .upsert({
+          game_id: prediction.game_id,
+          predicted_winner: prediction.predicted_winner,
+          predicted_spread: prediction.predicted_margin,
+          confidence_score: prediction.confidence_score,
+          home_team_strength: homeScore.score,
+          away_team_strength: awayScore.score,
+          recommended_bet: dbRecommendedBet,
+          value_score: prediction.value_score,
+          reasoning: prediction.reasoning || 'No significant value detected',
+          week_number: weekNumber,
+          season: season,
+        }, {
+          onConflict: 'game_id,week_number,season',
+          ignoreDuplicates: false,
+        });
+      error = fallback.error as any;
+    }
+
     if (error) {
       console.error('Error saving prediction:', error);
       return false;
@@ -544,10 +578,11 @@ export async function generateAndSavePredictions(
     console.log(`🎯 GENERATING PREDICTIONS - Week ${weekNumber}, ${season} Season`);
     console.log(`${'='.repeat(70)}\n`);
     
-    // Fetch upcoming games
+    // Fetch upcoming games for the specified week
     const { data: games, error } = await supabase
       .from('odds_bets')
-      .select('id, home_team, away_team, home_spread, away_spread, home_price, away_price, commence_time')
+      .select('id, home_team, away_team, home_spread, away_spread, home_price, away_price, commence_time, week')
+      .eq('week', weekNumber)
       .gte('commence_time', new Date().toISOString())
       .order('commence_time', { ascending: true })
       .limit(50);
@@ -621,33 +656,37 @@ export async function getBestBetsFromDatabase(
   const supabase = getSupabaseClient();
   
   try {
-    let query = supabase
-      .from('predictions')
-      .select(`
-        *,
-        odds_bets:game_id (
-          home_team,
-          away_team,
-          home_spread,
-          away_spread,
-          home_price,
-          away_price,
-          commence_time
-        )
-      `)
-      .neq('recommended_bet', 'none')
-      .order('confidence_score', { ascending: false })
-      .limit(limit);
-    
-    if (weekNumber) {
-      query = query.eq('week_number', weekNumber);
+    const buildQuery = (table: 'predictions' | 'spread_predictions') => {
+      let q = supabase
+        .from(table)
+        .select(`
+          *,
+          odds_bets:game_id (
+            home_team,
+            away_team,
+            home_spread,
+            away_spread,
+            home_price,
+            away_price,
+            commence_time
+          )
+        `)
+        .neq('recommended_bet', 'none')
+        .order('confidence_score', { ascending: false })
+        .limit(limit);
+      if (weekNumber) q = q.eq('week_number', weekNumber);
+      if (season) q = q.eq('season', season);
+      return q;
+    };
+
+    // Try primary table first
+    let { data, error } = await buildQuery('predictions');
+    if (error && (error as any).code === 'PGRST205') {
+      // Fallback to spread_predictions
+      const fallback = await buildQuery('spread_predictions');
+      data = fallback.data as any[] | null;
+      error = fallback.error as any;
     }
-    
-    if (season) {
-      query = query.eq('season', season);
-    }
-    
-    const { data, error } = await query;
     
     if (error) {
       console.error('Error fetching best bets from database:', error);

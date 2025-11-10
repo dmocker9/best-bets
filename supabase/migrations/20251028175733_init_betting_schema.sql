@@ -25,3 +25,9 @@ create table bets (
   sportsbook text,
   result text
 );
+
+-- Create indexes for performance
+CREATE INDEX idx_games_sport_id ON games(sport_id);
+CREATE INDEX idx_games_date ON games(date);
+CREATE INDEX idx_bets_game_id ON bets(game_id);
+CREATE INDEX idx_bets_bet_type ON bets(bet_type);

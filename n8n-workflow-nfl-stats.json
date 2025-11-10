@@ -1,0 +1,246 @@
+{
+  "name": "NFL Stats Sync Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * 2"
+            }
+          ]
+        }
+      },
+      "name": "Weekly Cron - Tuesday 3AM",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "cron-weekly"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "nfl-stats-sync",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook - Manual Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 450],
+      "webhookId": "manual-nfl-sync",
+      "id": "webhook-manual"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_URL }}/api/sync-nfl-stats",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "week",
+              "value": "={{ $now.format('w') }}"
+            },
+            {
+              "name": "season",
+              "value": "={{ $now.format('yyyy') }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000,
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "name": "Call Sync API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500, 375],
+      "id": "http-sync"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Check if Successful",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [750, 375],
+      "id": "if-success"
+    },
+    {
+      "parameters": {
+        "content": "## ✅ NFL Stats Sync Successful!\n\n**Summary:**\n- 🎯 Teams Synced: {{ $json.synced }}\n- 📊 Real Data: {{ $json.realDataCount }}\n- 📈 Estimated: {{ $json.estimatedCount }}\n- ❌ Failed: {{ $json.failed }}\n\n**Time:** {{ $now.format('MMM dd, yyyy HH:mm') }}\n**Week:** {{ $json.week || 'Current' }}",
+        "options": {}
+      },
+      "name": "Log Success",
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [1000, 250],
+      "id": "log-success"
+    },
+    {
+      "parameters": {
+        "content": "## ❌ NFL Stats Sync Failed!\n\n**Error:** {{ $json.message || $json.error }}\n\n**Time:** {{ $now.format('MMM dd, yyyy HH:mm') }}\n\n**Details:**\n```json\n{{ JSON.stringify($json, null, 2) }}\n```",
+        "options": {}
+      },
+      "name": "Log Error",
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [1000, 500],
+      "id": "log-error"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 375],
+      "id": "webhook-response"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  team_name,\n  wins || '-' || losses || '-' || ties as record,\n  points_per_game,\n  points_allowed_per_game,\n  srs,\n  updated_at\nFROM auto_nfl_team_stats\nWHERE season = {{ $now.format('yyyy') }}\nORDER BY srs DESC\nLIMIT 10"
+      },
+      "name": "Get Top 10 Teams",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1000, 125],
+      "credentials": {
+        "supabaseApi": {
+          "id": "1",
+          "name": "Supabase account"
+        }
+      },
+      "id": "supabase-top10"
+    }
+  ],
+  "connections": {
+    "Weekly Cron - Tuesday 3AM": {
+      "main": [
+        [
+          {
+            "node": "Call Sync API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call Sync API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Sync API": {
+      "main": [
+        [
+          {
+            "node": "Check if Successful",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Successful": {
+      "main": [
+        [
+          {
+            "node": "Log Success",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Top 10 Teams",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Success": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Top 10 Teams": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "NFL",
+      "id": "nfl"
+    },
+    {
+      "name": "Sports",
+      "id": "sports"
+    },
+    {
+      "name": "Automation",
+      "id": "automation"
+    }
+  ],
+  "meta": {
+    "instanceId": "your-instance-id"
+  }
+}
+

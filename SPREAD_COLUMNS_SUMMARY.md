@@ -146,3 +146,4 @@ Everything is set up and ready. Just click the **"Sync Odds Data"** button in yo
 
 For detailed documentation, see: `SPREAD_COLUMNS_GUIDE.md`
 
+

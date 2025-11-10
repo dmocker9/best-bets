@@ -14,7 +14,7 @@ const getSupabaseClient = () => {
 };
 
 // ESPN API configuration
-const ESPN_API_BASE = 'http://site.api.espn.com/apis/site/v2/sports/football/nfl';
+const ESPN_API_BASE = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 
 export interface NFLTeamStats {
   team_name: string;
@@ -621,7 +621,7 @@ export async function syncNFLTeamStats(
 }
 
 /**
- * Get team stats from database
+ * Get team stats from database (using auto_nfl_team_stats table)
  */
 export async function getTeamStats(
   teamName: string,
@@ -631,15 +631,15 @@ export async function getTeamStats(
   
   try {
     let query = supabase
-      .from('nfl_team_stats')
+      .from('auto_nfl_team_stats')
       .select('*')
       .eq('team_name', teamName);
     
     if (weekNumber) {
-      query = query.eq('week_number', weekNumber);
+      query = query.eq('week', weekNumber);
     }
     
-    query = query.order('week_number', { ascending: false }).limit(1);
+    query = query.order('week', { ascending: false }).limit(1);
     
     const { data, error } = await query.single();
     
@@ -648,9 +648,227 @@ export async function getTeamStats(
       return null;
     }
     
-    return data;
+    // Map auto_nfl_team_stats columns to NFLTeamStats interface
+    const mappedData: NFLTeamStats = {
+      team_name: data.team_name,
+      week_number: data.week,
+      season_year: data.season,
+      
+      // Basic record
+      wins: data.wins,
+      losses: data.losses,
+      ties: data.ties || 0,
+      win_loss_record: `${data.wins}-${data.losses}-${data.ties || 0}`,
+      win_percentage: data.win_percentage || 0,
+      
+      // Per-game stats (now stored in database)
+      points_per_game: data.points_per_game || 0,
+      points_allowed_per_game: data.points_allowed_per_game || 0,
+      point_differential: data.point_differential || 0,
+      margin_of_victory: data.margin_of_victory || 0,
+      
+      // Advanced metrics - map SRS columns
+      strength_of_schedule: data.strength_of_schedule || 0,
+      offensive_rating: data.offensive_srs || 0,
+      defensive_rating: data.defensive_srs || 0,
+      
+      // Optional calculated fields - use estimates from ratings
+      yards_per_play_offense: 5.5 + ((data.offensive_srs || 0) / 10),
+      yards_per_play_defense: 5.5 - ((data.defensive_srs || 0) / 10),
+      turnover_differential: Math.round((data.wins - data.losses) / 2),
+      home_record: undefined,
+      away_record: undefined,
+      last_3_games_performance: undefined,
+      key_injuries: [],
+    };
+    
+    return mappedData;
   } catch (error) {
     console.error(`Error getting team stats:`, error);
     return null;
+  }
+}
+
+/**
+ * Game result interface
+ */
+export interface GameResult {
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  gameStatus: string;
+  gameDate?: string;
+}
+
+/**
+ * Fetches NFL game results from ESPN API for any week
+ * Supports multiple weeks in the 2025 NFL season
+ */
+export async function fetchWeek9GameResults(
+  week: number = 9,
+  season: number = 2025
+): Promise<GameResult[]> {
+  try {
+    console.log(`📡 Fetching NFL Week ${week} game results from ESPN...`);
+    console.log(`Season: ${season}`);
+    
+    // Date ranges for different weeks in 2025 season
+    const dateRanges: Record<string, string> = {
+      '9-2024': '20241103-20241110', // Week 9, 2024
+      '9-2025': '20251030-20251103', // Week 9, 2025 (Oct 30 - Nov 3, 2025)
+      '10-2025': '20251107-20251111', // Week 10, 2025 (Nov 7-11, 2025)
+    };
+    
+    // Try multiple approaches to get the data
+    let data: any = null;
+    let events: any[] = [];
+    
+    // Approach 1: Try date range if available
+    const rangeKey = `${week}-${season}`;
+    if (dateRanges[rangeKey]) {
+      const dateRange = dateRanges[rangeKey];
+      const url = `${ESPN_API_BASE}/scoreboard?dates=${dateRange}`;
+      console.log(`📍 Trying URL: ${url}`);
+      
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          data = await response.json();
+          events = data.events || [];
+          console.log(`✅ Found ${events.length} games using date range`);
+        } else {
+          console.log(`⚠️  Date range approach returned: ${response.status}`);
+        }
+      } catch (error) {
+        console.log(`⚠️  Date range approach failed: ${error}`);
+      }
+    }
+    
+    // Approach 2: Try week parameter
+    if (events.length === 0) {
+      const url = `${ESPN_API_BASE}/scoreboard?week=${week}&seasontype=2&season=${season}`;
+      console.log(`📍 Trying URL: ${url}`);
+      
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          data = await response.json();
+          events = data.events || [];
+          console.log(`✅ Found ${events.length} games using week parameter`);
+        } else {
+          console.log(`⚠️  Week parameter approach returned: ${response.status}`);
+        }
+      } catch (error) {
+        console.log(`⚠️  Week parameter approach failed: ${error}`);
+      }
+    }
+    
+    // Approach 3: Try without parameters (gets current week)
+    if (events.length === 0) {
+      const url = `${ESPN_API_BASE}/scoreboard`;
+      console.log(`📍 Trying URL: ${url} (current week)`);
+      
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          data = await response.json();
+          events = data.events || [];
+          const currentWeek = data.week?.number;
+          console.log(`✅ Found ${events.length} games (current week: ${currentWeek})`);
+        }
+      } catch (error) {
+        console.log(`⚠️  Current week approach failed: ${error}`);
+      }
+    }
+    
+    if (events.length === 0) {
+      throw new Error(`No games found for Week ${week}, Season ${season}. The games may not have been played yet or the API may not have the data.`);
+    }
+    
+    const weekNumber = data.week?.number || week;
+    console.log(`✅ Processing ${events.length} games (Week ${weekNumber})`);
+    
+    const gameResults: GameResult[] = [];
+    
+    for (const event of events) {
+      const competitions = event.competitions || [];
+      
+      if (competitions.length === 0) {
+        continue;
+      }
+      
+      const competition = competitions[0];
+      const competitors = competition.competitors || [];
+      
+      if (competitors.length !== 2) {
+        continue;
+      }
+      
+      // Filter for specific week games only if we have a date range
+      const weekDateRanges: Record<string, { start: string; end: string }> = {
+        '9-2025': { start: '2025-10-30T00:00:00Z', end: '2025-11-03T23:59:59Z' },
+        '10-2025': { start: '2025-11-07T00:00:00Z', end: '2025-11-11T23:59:59Z' },
+      };
+      
+      const weekKey = `${week}-${season}`;
+      if (weekDateRanges[weekKey]) {
+        const eventDate = new Date(event.date);
+        const weekStart = new Date(weekDateRanges[weekKey].start);
+        const weekEnd = new Date(weekDateRanges[weekKey].end);
+        
+        if (eventDate < weekStart || eventDate > weekEnd) {
+          // Skip games outside this week's date range
+          continue;
+        }
+      }
+      
+      // Determine home and away teams
+      const homeCompetitor = competitors.find((c: any) => c.homeAway === 'home');
+      const awayCompetitor = competitors.find((c: any) => c.homeAway === 'away');
+      
+      if (!homeCompetitor || !awayCompetitor) {
+        // If home/away not specified, use first two
+        const [team1, team2] = competitors;
+        gameResults.push({
+          homeTeam: team2.team.displayName,
+          awayTeam: team1.team.displayName,
+          homeScore: parseInt(team2.score || '0'),
+          awayScore: parseInt(team1.score || '0'),
+          gameStatus: competition.status?.type?.description || 'Final',
+          gameDate: event.date,
+        });
+      } else {
+        gameResults.push({
+          homeTeam: homeCompetitor.team.displayName,
+          awayTeam: awayCompetitor.team.displayName,
+          homeScore: parseInt(homeCompetitor.score || '0'),
+          awayScore: parseInt(awayCompetitor.score || '0'),
+          gameStatus: competition.status?.type?.description || 'Final',
+          gameDate: event.date,
+        });
+      }
+    }
+    
+    console.log(`✅ Parsed ${gameResults.length} Week ${week} game results for ${season} season`);
+    return gameResults;
+  } catch (error) {
+    console.error('❌ Error fetching Week 9 game results:', error);
+    throw error;
   }
 }

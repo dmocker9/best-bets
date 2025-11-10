@@ -220,3 +220,4 @@ CAST(REPLACE(home_price, '+', '') AS INTEGER)
 
 Your betting odds now display with proper +/- formatting, making it crystal clear which teams are favorites and underdogs at a glance!
 
+

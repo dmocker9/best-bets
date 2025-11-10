@@ -1,0 +1,9 @@
+supabase==2.6.0
+nfl_data_py==0.3.3
+pandas==1.5.3
+python-dotenv==1.0.1
+pyarrow==17.0.0
+beautifulsoup4==4.12.2
+requests==2.31.0
+
+

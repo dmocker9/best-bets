@@ -295,3 +295,4 @@ For issues or questions about spread columns:
 3. Check Supabase logs for any errors during sync
 4. Review the JSONB bookmakers structure for unexpected formats
 
+
