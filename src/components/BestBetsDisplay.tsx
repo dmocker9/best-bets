@@ -34,6 +34,8 @@ interface GamePrediction {
   value_score: number;
   recommended_bet: string | null;
   bet_type: 'home_spread' | 'away_spread' | 'home_ml' | 'away_ml' | 'none' | null;
+  bet_strength?: 'strong' | 'good' | 'value' | 'insight';
+  quality_score?: number;
   reasoning: string;
   home_stats?: TeamStats;
   away_stats?: TeamStats;
@@ -53,7 +55,7 @@ export function BestBetsDisplay() {
   const [result, setResult] = useState<BestBetsResponse | null>(null);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [showGlossary, setShowGlossary] = useState(false);
-  const [selectedWeek, setSelectedWeek] = useState<number>(10);
+  const [selectedWeek, setSelectedWeek] = useState<number>(11);
   const [selectedSeason, setSelectedSeason] = useState<number>(2025);
 
   const fetchBestBets = useCallback(async () => {
@@ -252,11 +254,23 @@ export function BestBetsDisplay() {
                   </div>
 
                   {/* Recommended Bet */}
-                  <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3 mb-3">
-                    <div className="mb-2">
-                      <span className="text-sm font-semibold text-blue-400 uppercase">
-                        Recommended {prediction.bet_type?.includes('_ml') ? 'Moneyline' : 'Spread'}
+                  <div className={`border rounded-lg p-3 mb-3 ${
+                    prediction.bet_strength === 'strong' ? 'bg-green-900/20 border-green-700' :
+                    prediction.bet_strength === 'good' ? 'bg-blue-900/20 border-blue-700' :
+                    prediction.bet_strength === 'value' ? 'bg-yellow-900/20 border-yellow-700' :
+                    'bg-gray-900/20 border-gray-600'
+                  }`}>
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className={`text-sm font-semibold uppercase ${
+                        prediction.bet_strength === 'strong' ? 'text-green-400' :
+                        prediction.bet_strength === 'good' ? 'text-blue-400' :
+                        prediction.bet_strength === 'value' ? 'text-yellow-400' :
+                        'text-gray-400'
+                      }`}>
+                        {prediction.bet_strength === 'insight' ? 'Model Pick' : 
+                         `${prediction.bet_strength} Bet`} - {prediction.bet_type?.includes('_ml') ? 'Moneyline' : 'Spread'}
                       </span>
+                      {prediction.bet_strength === 'strong' && <span className="text-xs bg-green-500 text-black px-2 py-0.5 rounded font-bold">⭐ TOP PICK</span>}
                     </div>
                     <p className="text-xl font-bold text-white mb-2">
                       {prediction.recommended_bet}
@@ -290,25 +304,7 @@ export function BestBetsDisplay() {
                     </button>
 
                     {/* Detailed Explanation - Expanded */}
-                    {expandedCards.has(prediction.game_id) && (
-                      <>
-                        {(() => {
-                          console.log('Rendering expanded for:', prediction.game_id);
-                          console.log('Has home_stats?', !!prediction.home_stats);
-                          console.log('Has away_stats?', !!prediction.away_stats);
-                          return null;
-                        })()}
-                        {!prediction.home_stats || !prediction.away_stats ? (
-                          <div className="mt-4 pt-4 border-t border-blue-700/50 text-center py-8">
-                            <div className="text-gray-400 mb-2">
-                              <svg className="animate-spin h-8 w-8 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Loading detailed statistics...
-                            </div>
-                          </div>
-                        ) : (
+                    {expandedCards.has(prediction.game_id) && prediction.home_stats && prediction.away_stats && (
                       <div className="mt-4 pt-4 border-t border-blue-700/50 space-y-4 text-sm">
                         {/* Detailed Bet Breakdown */}
                         <div className="space-y-2 mb-4 bg-gray-900/30 p-3 rounded border border-blue-700/30">
@@ -476,54 +472,6 @@ export function BestBetsDisplay() {
                           </div>
                         </div>
 
-                        {/* Model Analysis */}
-                        <div className="space-y-2 pt-3 border-t border-blue-700/30">
-                          <h4 className="font-bold text-blue-300">Why This Bet:</h4>
-                          <div className="space-y-2 text-xs">
-                            <div className="bg-gray-900/50 p-3 rounded">
-                              <div className="font-semibold text-yellow-400 mb-2">Model Prediction:</div>
-                              <div className="space-y-1 text-gray-300">
-                                <div>• Predicted Winner: <span className="text-white font-medium">{prediction.predicted_winner}</span></div>
-                                <div>• Predicted Margin: <span className="text-white font-medium">{Math.abs(prediction.predicted_margin).toFixed(1)} points</span></div>
-                                <div>• Vegas Spread: <span className="text-white font-medium">{prediction.current_spread}</span></div>
-                              </div>
-                            </div>
-                            
-                            <div className="bg-gray-900/50 p-3 rounded">
-                              <div className="font-semibold text-green-400 mb-2">Key Advantages:</div>
-                              <div className="space-y-1 text-gray-300">
-                                <div>• Strength Gap: <span className="text-white font-medium">{Math.abs(prediction.home_team_strength - prediction.away_team_strength).toFixed(1)} points</span> 
-                                  {prediction.home_team_strength > prediction.away_team_strength 
-                                    ? ` (${prediction.home_team} stronger)` 
-                                    : ` (${prediction.away_team} stronger)`}
-                                </div>
-                                <div>• SRS Differential: <span className="text-white font-medium">
-                                  {Math.abs((prediction.home_stats.offensive_rating + prediction.home_stats.defensive_rating) - 
-                                           (prediction.away_stats.offensive_rating + prediction.away_stats.defensive_rating)).toFixed(1)}
-                                </span></div>
-                                <div>• Confidence: <span className={`font-bold ${
-                                  prediction.confidence_score >= 70 ? 'text-green-400' : 
-                                  prediction.confidence_score >= 50 ? 'text-yellow-400' : 'text-orange-400'
-                                }`}>
-                                  {prediction.confidence_score.toFixed(0)}%
-                                </span></div>
-                                <div className={`mt-2 p-2 rounded border ${
-                                  prediction.confidence_score >= 70 ? 'bg-green-900/20 border-green-700' : 
-                                  prediction.confidence_score >= 50 ? 'bg-yellow-900/20 border-yellow-700' : 'bg-orange-900/20 border-orange-700'
-                                }`}>
-                                  <span className={`font-bold text-xs uppercase ${
-                                    prediction.confidence_score >= 70 ? 'text-green-300' : 
-                                    prediction.confidence_score >= 50 ? 'text-yellow-300' : 'text-orange-300'
-                                  }`}>
-                                    {prediction.confidence_score >= 70 ? '✓ High Confidence - Strong Betting Opportunity' : 
-                                     prediction.confidence_score >= 50 ? '○ Moderate Confidence - Good Betting Opportunity' : '◇ Value Play - Consider With Caution'}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
                         {/* Key Insight */}
                         <div className="pt-3 border-t border-blue-700/30">
                           <div className="bg-gradient-to-r from-indigo-900/40 via-purple-900/40 to-indigo-900/40 p-4 rounded-lg border border-indigo-700/50">
@@ -544,8 +492,8 @@ export function BestBetsDisplay() {
                                 {((prediction.home_stats?.offensive_rating || 0) + (prediction.home_stats?.defensive_rating || 0)).toFixed(1)} vs{' '}
                                 {((prediction.away_stats?.offensive_rating || 0) + (prediction.away_stats?.defensive_rating || 0)).toFixed(1)}
                               </span>
-                              ), giving them a substantial edge. After applying dampening factors (0.85x for realistic spreads) and home field advantage 
-                              (+2.5 pts), the model projects a {Math.abs(prediction.predicted_margin).toFixed(1)}-point margin, creating a{' '}
+                              ), giving them a substantial edge. After applying conservative dampening (0.70×), home field advantage 
+                              (+1.5 pts), and injury adjustments, the model projects a {Math.abs(prediction.predicted_margin).toFixed(1)}-point margin, creating a{' '}
                               <span className="text-green-400 font-semibold">
                                 {Math.abs(Math.abs(prediction.predicted_margin) - Math.abs(parseFloat(prediction.current_spread.replace(/[^\d.-]/g, '')))).toFixed(1)}-point edge
                               </span>{' '}
@@ -559,8 +507,6 @@ export function BestBetsDisplay() {
                           📊 Analysis based on 2025 season data including SRS (Simple Rating System), strength of schedule, and performance metrics.
                         </div>
                       </div>
-                        )}
-                      </>
                     )}
                   </div>
 

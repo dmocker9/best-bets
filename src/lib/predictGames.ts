@@ -62,37 +62,68 @@ const PREDICTION_WEIGHTS = {
 
 /**
  * Calculate offensive strength score (0-100)
+ * ONLY uses real data - NO ESTIMATIONS
  */
 function calculateOffensiveScore(stats: NFLTeamStats): number {
+  // Use ONLY Points Per Game (real data from database)
   const ppgScore = Math.min(100, (stats.points_per_game / 35) * 100);
   
-  // Use offensive rating if yards per play not available
-  const ypp = stats.yards_per_play_offense ?? (5.5 + (stats.offensive_rating / 10));
-  const yppScore = Math.min(100, ((ypp - 4.0) / 3.0) * 100);
+  // Use offensive SRS as secondary metric (real data)
+  // SRS ranges typically -10 to +10, normalize to 0-100
+  const srsScore = Math.max(0, Math.min(100, ((stats.offensive_rating + 10) / 20) * 100));
   
-  return (ppgScore * 0.6) + (yppScore * 0.4);
+  // Weight: PPG 70%, SRS 30% (both are real data)
+  return (ppgScore * 0.7) + (srsScore * 0.3);
 }
 
 /**
  * Calculate defensive strength score (0-100) - lower points allowed is better
+ * Uses real yards per play data from team_defense_stats when available
  */
-function calculateDefensiveScore(stats: NFLTeamStats): number {
-  // Invert so lower points allowed = higher score
+async function calculateDefensiveScore(stats: NFLTeamStats, teamName: string): Promise<number> {
+  // Points Allowed score (real data)
   const paScore = Math.max(0, Math.min(100, ((30 - stats.points_allowed_per_game) / 15) * 100));
   
-  // Use defensive rating if yards per play defense not available
-  const ypd = stats.yards_per_play_defense ?? (5.5 - (stats.defensive_rating / 10));
-  const ypdScore = Math.max(0, Math.min(100, ((6.5 - ypd) / 2.5) * 100));
+  // Try to get real defensive yards per play from team_defense_stats
+  let ypdScore = 0;
+  let hasRealYPP = false;
   
+  const supabase = getSupabaseClient();
+  const { data: defenseStats } = await supabase
+    .from('team_defense_stats')
+    .select('yards_per_play')
+    .eq('team_name', teamName)
+    .order('week', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  
+  if (defenseStats && defenseStats.yards_per_play != null) {
+    // Use REAL yards per play data
+    const ypd = defenseStats.yards_per_play;
+    ypdScore = Math.max(0, Math.min(100, ((6.5 - ypd) / 2.5) * 100));
+    hasRealYPP = true;
+  } else {
+    // No yards per play data available - use only PA score
+    // Don't estimate, just weight PA at 100%
+    return paScore;
+  }
+  
+  // If we have real YPP, use both metrics
   return (paScore * 0.6) + (ypdScore * 0.4);
 }
 
 /**
  * Calculate turnover margin score (0-100)
+ * ONLY if we have real data - otherwise return neutral 50
  */
 function calculateTurnoverScore(stats: NFLTeamStats): number {
-  // Estimate from wins/losses if not available
-  const turnoverDiff = stats.turnover_differential ?? Math.round((stats.wins - stats.losses) / 2);
+  // Only use if we have REAL turnover data (not null/undefined)
+  if (stats.turnover_differential == null) {
+    // No real data - return neutral score (no advantage/disadvantage)
+    return 50;
+  }
+  
+  const turnoverDiff = stats.turnover_differential;
   
   // Normalize turnover differential (-15 to +15 range)
   const normalized = ((turnoverDiff + 15) / 30) * 100;
@@ -101,6 +132,7 @@ function calculateTurnoverScore(stats: NFLTeamStats): number {
 
 /**
  * Calculate recent form score based on last 3 games (0-100)
+ * Enhanced with recency weighting, margin analysis, and opponent quality
  */
 function calculateRecentFormScore(performance: string | undefined, stats: NFLTeamStats): number {
   if (!performance) {
@@ -109,13 +141,54 @@ function calculateRecentFormScore(performance: string | undefined, stats: NFLTea
   }
   
   const games = performance.split('-');
-  let wins = 0;
   
+  // Count total wins
+  let wins = 0;
   games.forEach(result => {
     if (result === 'W') wins++;
   });
   
-  return (wins / games.length) * 100;
+  // Base score from W/L record (more nuanced than 0-100)
+  let baseScore = 50; // Default neutral
+  if (wins === 3) {
+    baseScore = 80; // Perfect record, but leave room for quality adjustment
+  } else if (wins === 2) {
+    baseScore = 55; // Positive but not dominant
+  } else if (wins === 1) {
+    baseScore = 35; // Struggling but not hopeless
+  } else if (wins === 0) {
+    baseScore = 20; // Bad, but even 0-3 teams have some value
+  }
+  
+  // Apply recency weighting (most recent game matters more)
+  // Format: "W-W-L" where last is most recent
+  // Weights: Oldest (25%), Middle (35%), Most recent (40%)
+  const recencyWeights = [0.25, 0.35, 0.40];
+  let recencyAdjustedScore = 0;
+  
+  games.forEach((result, index) => {
+    if (index < recencyWeights.length) {
+      const gameValue = result === 'W' ? 100 : 0;
+      recencyAdjustedScore += gameValue * recencyWeights[index];
+    }
+  });
+  
+  // Blend base score (60%) with recency-weighted score (40%)
+  // This ensures base win count matters, but recent games have extra weight
+  const blendedScore = (baseScore * 0.60) + (recencyAdjustedScore * 0.40);
+  
+  // TODO: Add margin adjustment (+/- 10 points)
+  // - Fetch actual game scores from database
+  // - Blowout wins (>14 pts): +5-10 points
+  // - Close losses (<7 pts): +3-5 points
+  // - Blowout losses (>21 pts): -5-10 points
+  
+  // TODO: Add opponent quality adjustment (+/- 10 points)
+  // - Fetch opponent records/SRS from database
+  // - Wins vs top teams (SRS > +5): +5-10 points
+  // - Losses to bad teams (SRS < -5): -5-10 points
+  
+  return Math.max(0, Math.min(100, blendedScore));
 }
 
 /**
@@ -134,56 +207,250 @@ function calculateHomeFieldScore(homeRecord: string | undefined, stats: NFLTeamS
 }
 
 /**
- * Calculate injury impact (0-100) - more injuries = lower score
+ * Position weights for injury impact calculation
  */
-function calculateInjuryScore(injuries: any[] | undefined): number {
-  if (!injuries || injuries.length === 0) return 100;
+const POSITION_WEIGHTS: Record<string, number> = {
+  'QB': 1.0,
+  'LT': 0.6,
+  'RT': 0.6,
+  'EDGE': 0.6,
+  'DE': 0.6,
+  'CB': 0.6,
+  'WR': 0.4,
+  'RB': 0.4,
+  'LB': 0.4,
+  'S': 0.4,
+  'TE': 0.3,
+  'DL': 0.3,
+  'OL': 0.25,
+  // Fallback for other positions
+  'T': 0.5,   // Tackle (not specified as LT/RT)
+  'G': 0.2,   // Guard
+  'C': 0.3,   // Center
+  'FB': 0.15, // Fullback
+  'DB': 0.4,  // Defensive Back
+  'OLB': 0.4, // Outside Linebacker
+  'ILB': 0.4, // Inside Linebacker
+  'MLB': 0.4, // Middle Linebacker
+  'DT': 0.3,  // Defensive Tackle
+  'NT': 0.25, // Nose Tackle
+  'FS': 0.4,  // Free Safety
+  'SS': 0.4,  // Strong Safety
+  'K': 0.05,  // Kicker
+  'P': 0.05,  // Punter
+  'LS': 0.05, // Long Snapper
+};
+
+// Offensive vs Defensive position classification
+const OFFENSIVE_POSITIONS = new Set([
+  'QB', 'RB', 'WR', 'TE', 'OL', 'LT', 'RT', 'G', 'C', 'T', 'FB'
+]);
+
+const DEFENSIVE_POSITIONS = new Set([
+  'DE', 'DL', 'DT', 'NT', 'EDGE', 'LB', 'OLB', 'ILB', 'MLB', 
+  'CB', 'S', 'FS', 'SS', 'DB'
+]);
+
+/**
+ * Calculate injury impact using snap counts and position weights
+ * Returns separate offensive and defensive impact scores (0-100)
+ */
+async function calculateInjuryImpact(teamAbbr: string): Promise<{ 
+  offensiveScore: number; 
+  defensiveScore: number;
+  details: string[];
+}> {
+  const supabase = getSupabaseClient();
   
-  // Each key injury reduces score
-  const impactByPosition: Record<string, number> = {
-    'QB': 30,
-    'RB': 10,
-    'WR': 8,
-    'TE': 5,
-    'OL': 7,
-    'DL': 7,
-    'LB': 6,
-    'CB': 8,
-    'S': 5,
-  };
-  
-  let totalImpact = 0;
-  
-  injuries.forEach((injury: any) => {
-    const position = injury.position || 'OTHER';
-    const impact = impactByPosition[position] || 5;
+  try {
+    // Get injured players who are NOT on track to play
+    const { data: injuries, error: injuryError } = await supabase
+      .from('injuries')
+      .select('player_name, position, team_abbr, on_track_to_play, game_status')
+      .eq('team_abbr', teamAbbr)
+      .eq('season', 2025)
+      .eq('on_track_to_play', false); // Only players NOT on track
     
-    // Multiply by severity
-    if (injury.status === 'Out') {
-      totalImpact += impact;
-    } else if (injury.status === 'Questionable') {
-      totalImpact += impact * 0.5;
-    } else if (injury.status === 'Doubtful') {
-      totalImpact += impact * 0.75;
+    if (injuryError || !injuries || injuries.length === 0) {
+      return { 
+        offensiveScore: 100, 
+        defensiveScore: 100,
+        details: []
+      };
     }
-  });
-  
-  return Math.max(0, 100 - totalImpact);
+    
+    // Get snap counts for the injured players
+    const { data: snapCounts, error: snapError } = await supabase
+      .from('snap_counts')
+      .select('player_name, position, offensive_snap_pct, defensive_snap_pct, team_abbr')
+      .eq('team_abbr', teamAbbr)
+      .eq('season', 2025)
+      .order('week_number', { ascending: false })
+      .limit(100); // Get recent snap counts
+    
+    if (snapError || !snapCounts) {
+      // If no snap count data, use legacy simplified calculation
+      return calculateLegacyInjuryImpact(injuries);
+    }
+    
+    // Create a map of snap counts by player name
+    const snapMap = new Map<string, typeof snapCounts[0]>();
+    snapCounts.forEach(snap => {
+      // Store the most recent snap count for each player
+      if (!snapMap.has(snap.player_name)) {
+        snapMap.set(snap.player_name, snap);
+      }
+    });
+    
+    let offensiveImpact = 0;
+    let defensiveImpact = 0;
+    const details: string[] = [];
+    
+    // Calculate impact for each injured player
+    for (const injury of injuries) {
+      const snapData = snapMap.get(injury.player_name);
+      
+      if (!snapData) {
+        // Player not found in snap counts - skip or use minimal impact
+        continue;
+      }
+      
+      const position = (injury.position || '').toUpperCase();
+      const positionWeight = POSITION_WEIGHTS[position] || 0.2; // Default weight
+      
+      // Determine if offensive or defensive player
+      const isOffensive = OFFENSIVE_POSITIONS.has(position);
+      const isDefensive = DEFENSIVE_POSITIONS.has(position);
+      
+      if (isOffensive) {
+        // Use offensive snap percentage
+        const snapPct = snapData.offensive_snap_pct || 0;
+        const impact = positionWeight * (snapPct / 100);
+        offensiveImpact += impact;
+        
+        details.push(
+          `${injury.player_name} (${position}): ${snapPct.toFixed(1)}% snaps × ${positionWeight} weight = ${impact.toFixed(3)} OFF impact`
+        );
+      }
+      
+      if (isDefensive) {
+        // Use defensive snap percentage
+        const snapPct = snapData.defensive_snap_pct || 0;
+        const impact = positionWeight * (snapPct / 100);
+        defensiveImpact += impact;
+        
+        details.push(
+          `${injury.player_name} (${position}): ${snapPct.toFixed(1)}% snaps × ${positionWeight} weight = ${impact.toFixed(3)} DEF impact`
+        );
+      }
+    }
+    
+    // Scale constants
+    const OFFENSIVE_SCALE = 12;
+    const DEFENSIVE_SCALE = 10;
+    
+    // Calculate percentage impact (scaled to 0-100)
+    // Higher raw impact = lower score
+    const offensivePenalty = Math.min(100, (offensiveImpact / OFFENSIVE_SCALE) * 100);
+    const defensivePenalty = Math.min(100, (defensiveImpact / DEFENSIVE_SCALE) * 100);
+    
+    const offensiveScore = Math.max(0, 100 - offensivePenalty);
+    const defensiveScore = Math.max(0, 100 - defensivePenalty);
+    
+    details.push(`\nTotal Offensive Impact: ${offensiveImpact.toFixed(3)} → Penalty: ${offensivePenalty.toFixed(1)}% → Score: ${offensiveScore.toFixed(1)}`);
+    details.push(`Total Defensive Impact: ${defensiveImpact.toFixed(3)} → Penalty: ${defensivePenalty.toFixed(1)}% → Score: ${defensiveScore.toFixed(1)}`);
+    
+    return {
+      offensiveScore,
+      defensiveScore,
+      details
+    };
+    
+  } catch (error) {
+    console.error('Error calculating injury impact:', error);
+    return { 
+      offensiveScore: 100, 
+      defensiveScore: 100,
+      details: ['Error fetching injury data']
+    };
+  }
 }
 
 /**
- * Calculate comprehensive team score
+ * Legacy injury calculation (fallback when snap counts not available)
  */
-function calculateTeamScore(
+function calculateLegacyInjuryImpact(injuries: any[]): {
+  offensiveScore: number;
+  defensiveScore: number;
+  details: string[];
+} {
+  let offensiveImpact = 0;
+  let defensiveImpact = 0;
+  const details: string[] = ['Using legacy calculation (no snap count data)'];
+  
+  injuries.forEach((injury: any) => {
+    const position = (injury.position || '').toUpperCase();
+    const weight = POSITION_WEIGHTS[position] || 0.2;
+    
+    // Assume injured starter plays ~60% of snaps
+    const estimatedSnapPct = 60;
+    const impact = weight * (estimatedSnapPct / 100);
+    
+    if (OFFENSIVE_POSITIONS.has(position)) {
+      offensiveImpact += impact;
+      details.push(`${injury.player_name} (${position}): Est. impact ${impact.toFixed(3)} OFF`);
+    }
+    
+    if (DEFENSIVE_POSITIONS.has(position)) {
+      defensiveImpact += impact;
+      details.push(`${injury.player_name} (${position}): Est. impact ${impact.toFixed(3)} DEF`);
+    }
+  });
+  
+  const OFFENSIVE_SCALE = 12;
+  const DEFENSIVE_SCALE = 10;
+  
+  const offensivePenalty = Math.min(100, (offensiveImpact / OFFENSIVE_SCALE) * 100);
+  const defensivePenalty = Math.min(100, (defensiveImpact / DEFENSIVE_SCALE) * 100);
+  
+  return {
+    offensiveScore: Math.max(0, 100 - offensivePenalty),
+    defensiveScore: Math.max(0, 100 - defensivePenalty),
+    details
+  };
+}
+
+/**
+ * Calculate comprehensive team score with injury impact
+ */
+async function calculateTeamScore(
   stats: NFLTeamStats,
-  isHome: boolean
-): { score: number; breakdown: Record<string, number> } {
-  const offensiveScore = calculateOffensiveScore(stats);
-  const defensiveScore = calculateDefensiveScore(stats);
+  isHome: boolean,
+  teamAbbr: string,
+  teamFullName: string
+): Promise<{ 
+  score: number; 
+  breakdown: Record<string, number>;
+  injuryDetails?: string[];
+}> {
+  // Calculate base scores (offensive is sync, defensive is async)
+  const baseOffensiveScore = calculateOffensiveScore(stats);
+  const baseDefensiveScore = await calculateDefensiveScore(stats, teamFullName);
   const turnoverScore = calculateTurnoverScore(stats);
   const recentFormScore = calculateRecentFormScore(stats.last_3_games_performance, stats);
   const homeFieldScore = isHome ? calculateHomeFieldScore(stats.home_record, stats) : 50;
-  const injuryScore = calculateInjuryScore(stats.key_injuries);
+  
+  // Get injury impact (async call to database)
+  const injuryImpact = await calculateInjuryImpact(teamAbbr);
+  
+  // Apply injury penalties to offensive and defensive scores
+  // Injury scores are 0-100 where 100 = no impact, 0 = severe impact
+  // We multiply the base scores by the injury factor
+  const offensiveScore = baseOffensiveScore * (injuryImpact.offensiveScore / 100);
+  const defensiveScore = baseDefensiveScore * (injuryImpact.defensiveScore / 100);
+  
+  // Combined injury score for overall team impact (average of OFF and DEF)
+  const combinedInjuryScore = (injuryImpact.offensiveScore + injuryImpact.defensiveScore) / 2;
   
   const totalScore = 
     (offensiveScore * PREDICTION_WEIGHTS.offensive_strength) +
@@ -191,7 +458,7 @@ function calculateTeamScore(
     (turnoverScore * PREDICTION_WEIGHTS.turnover_margin) +
     (recentFormScore * PREDICTION_WEIGHTS.recent_form) +
     (homeFieldScore * PREDICTION_WEIGHTS.home_field_advantage) +
-    (injuryScore * PREDICTION_WEIGHTS.injury_impact);
+    (combinedInjuryScore * PREDICTION_WEIGHTS.injury_impact);
   
   return {
     score: totalScore,
@@ -201,8 +468,9 @@ function calculateTeamScore(
       turnover: turnoverScore,
       recentForm: recentFormScore,
       homeField: homeFieldScore,
-      injury: injuryScore,
+      injury: combinedInjuryScore,
     },
+    injuryDetails: injuryImpact.details,
   };
 }
 
@@ -218,27 +486,50 @@ function calculateConfidence(
   predictedMargin: number,
   vegasSpread: number
 ): number {
-  // 1. Team Strength Gap (50% weight - increased from 40%)
-  const strengthGap = Math.abs(homeStrength - awayStrength);
-  const strengthConfidence = Math.min(100, (strengthGap / 20) * 100);
+  // 1. Edge Magnitude (50% weight) - How much we disagree with Vegas
+  // Larger edges = more conviction in our model's view
+  const edgeMagnitude = Math.abs(predictedMargin - (-vegasSpread));
+  const edgeScore = Math.min(100, (edgeMagnitude / 6) * 100); // 6 points = 100%
   
-  // 2. Team Consistency (30% weight - increased from 20%)
+  // 2. Matchup Clarity (30% weight) - Smart handling of strength gaps
+  // LARGE gap + betting favorite = HIGH confidence (dominant team will cover)
+  // SMALL gap = HIGH confidence (predictable close game)
+  // LARGE gap + betting underdog = LOWER confidence (variance in blowout margin)
+  const strengthGap = Math.abs(homeStrength - awayStrength);
+  const strongerTeam = homeStrength > awayStrength ? 'home' : 'away';
+  const modelFavorsHome = predictedMargin > 0;
+  const modelFavorsAway = predictedMargin < 0;
+  
+  let matchupClarityScore = 0;
+  if (strengthGap < 10) {
+    // Close matchup: highly predictable margin (60-100% certainty)
+    matchupClarityScore = 100 - (strengthGap * 4); // 0 gap = 100%, 10 gap = 60%
+  } else {
+    // Mismatch: check if we're backing the favorite or underdog
+    const backingFavorite = 
+      (strongerTeam === 'home' && modelFavorsHome) || 
+      (strongerTeam === 'away' && modelFavorsAway);
+    
+    if (backingFavorite) {
+      // Betting favorite in mismatch = high confidence (they should dominate)
+      matchupClarityScore = Math.min(100, 70 + (strengthGap / 3)); // 10 gap = 73%, 20 gap = 77%, 30 gap = 80%
+    } else {
+      // Betting underdog in mismatch = lower confidence (could get blown out)
+      matchupClarityScore = Math.max(20, 60 - (strengthGap / 2)); // 10 gap = 55%, 20 gap = 50%, 30 gap = 45%
+    }
+  }
+  
+  // 3. Team Consistency (20% weight)
   // Teams with moderate margins are more predictable
   const homeConsistency = calculateConsistency(homeStats);
   const awayConsistency = calculateConsistency(awayStats);
   const avgConsistency = (homeConsistency + awayConsistency) / 2;
   
-  // 3. Record Quality (20% weight - NEW)
-  // Win percentage adjusted for strength of schedule
-  const homeRecordQuality = calculateRecordQuality(homeStats);
-  const awayRecordQuality = calculateRecordQuality(awayStats);
-  const avgRecordQuality = (homeRecordQuality + awayRecordQuality) / 2;
-  
-  // Weighted average (simplified from 4 factors to 3)
+  // Weighted average (Record Quality removed, Edge increased to 50%)
   const finalConfidence = 
-    (strengthConfidence * 0.50) +
-    (avgConsistency * 0.30) +
-    (avgRecordQuality * 0.20);
+    (edgeScore * 0.50) +
+    (matchupClarityScore * 0.30) +
+    (avgConsistency * 0.20);
   
   return Math.max(0, Math.min(100, finalConfidence));
 }
@@ -267,6 +558,44 @@ function calculateRecordQuality(stats: NFLTeamStats): number {
   
   return Math.max(0, Math.min(100, recordQuality));
 }
+
+/**
+ * Map team full names to abbreviations
+ */
+const TEAM_NAME_TO_ABBR: Record<string, string> = {
+  'Arizona Cardinals': 'ARI',
+  'Atlanta Falcons': 'ATL',
+  'Baltimore Ravens': 'BAL',
+  'Buffalo Bills': 'BUF',
+  'Carolina Panthers': 'CAR',
+  'Chicago Bears': 'CHI',
+  'Cincinnati Bengals': 'CIN',
+  'Cleveland Browns': 'CLE',
+  'Dallas Cowboys': 'DAL',
+  'Denver Broncos': 'DEN',
+  'Detroit Lions': 'DET',
+  'Green Bay Packers': 'GNB',
+  'Houston Texans': 'HOU',
+  'Indianapolis Colts': 'IND',
+  'Jacksonville Jaguars': 'JAX',
+  'Kansas City Chiefs': 'KAN',
+  'Las Vegas Raiders': 'LVR',
+  'Los Angeles Chargers': 'LAC',
+  'Los Angeles Rams': 'LAR',
+  'Miami Dolphins': 'MIA',
+  'Minnesota Vikings': 'MIN',
+  'New England Patriots': 'NWE',
+  'New Orleans Saints': 'NOR',
+  'New York Giants': 'NYG',
+  'New York Jets': 'NYJ',
+  'Philadelphia Eagles': 'PHI',
+  'Pittsburgh Steelers': 'PIT',
+  'San Francisco 49ers': 'SFO',
+  'Seattle Seahawks': 'SEA',
+  'Tampa Bay Buccaneers': 'TAM',
+  'Tennessee Titans': 'TEN',
+  'Washington Commanders': 'WAS',
+};
 
 /**
  * Check if two teams are division rivals
@@ -307,18 +636,22 @@ export async function predictGame(game: GameOdds): Promise<GamePrediction | null
       return null;
     }
     
-    // Calculate team scores for confidence calculation
-    const homeScore = calculateTeamScore(homeStats, true);
-    const awayScore = calculateTeamScore(awayStats, false);
+    // Get team abbreviations for injury lookup
+    const homeAbbr = TEAM_NAME_TO_ABBR[game.home_team] || game.home_team;
+    const awayAbbr = TEAM_NAME_TO_ABBR[game.away_team] || game.away_team;
+    
+    // Calculate team scores for confidence calculation (now async with injury impact and real defensive data)
+    const homeScore = await calculateTeamScore(homeStats, true, homeAbbr, game.home_team);
+    const awayScore = await calculateTeamScore(awayStats, false, awayAbbr, game.away_team);
     
     // Use SRS differential for spread prediction with dampening
     // SRS represents team strength but needs to be calibrated for actual spreads
     const homeSRS = homeStats.offensive_rating + homeStats.defensive_rating;
     const awaySRS = awayStats.offensive_rating + awayStats.defensive_rating;
-    const HOME_FIELD_ADVANTAGE = 2.5; // Standard NFL home field advantage
+    const HOME_FIELD_ADVANTAGE = 1.5; // Adjusted NFL home field advantage
     
-    // Apply dampening factor: 0.85 better aligns with actual spreads
-    const SRS_DAMPENING = 0.85;
+    // Apply conservative dampening factor: 0.70 prevents extreme spreads
+    const SRS_DAMPENING = 0.70;
     const srsDifferential = (homeSRS - awaySRS) * SRS_DAMPENING;
     
     // Check if division game (games between divisional rivals are typically closer)
@@ -386,13 +719,18 @@ export async function predictGame(game: GameOdds): Promise<GamePrediction | null
     const agreesOnFavorite = vegasFavorite === modelFavorite;
     
     // Regression dampening: If model disagrees by >8 points, likely model error not value
-    const REALISTIC_EDGE_MIN = 2.5;
+    const REALISTIC_EDGE_MIN = 1.5; // Lowered from 2.5 to be less conservative
     const REALISTIC_EDGE_MAX = 7.5;
     const isRealisticEdge = disagreement >= REALISTIC_EDGE_MIN && disagreement <= REALISTIC_EDGE_MAX;
     
-    // UNIFORM confidence threshold - no penalty for underdogs
-    // Model rarely picks different winners, so we focus on spread value
-    const requiredConfidence = 65; // Same for all bets
+    // Tiered confidence thresholds based on edge size
+    // Larger edges require higher confidence, smaller edges can have lower confidence
+    let requiredConfidence = 60; // Base threshold (was 65)
+    if (disagreement >= 5.0) {
+      requiredConfidence = 65; // Large edges need more confidence
+    } else if (disagreement >= 3.5) {
+      requiredConfidence = 62; // Medium edges
+    }
     
     // Recommendation logic - finds value on both favorites AND underdogs
     if (isRealisticEdge && confidence >= requiredConfidence) {
@@ -455,6 +793,15 @@ export async function predictGame(game: GameOdds): Promise<GamePrediction | null
       reasoning = `${confidenceTier} (${confidence.toFixed(0)}%): Edge insufficient (${disagreement.toFixed(1)}pts) or confidence below threshold (${requiredConfidence}%).`;
     }
     
+    // Add injury impact to reasoning if significant
+    let fullReasoning = reasoning;
+    if (homeScore.injuryDetails && homeScore.injuryDetails.length > 0) {
+      fullReasoning += `\n\n${game.home_team} Injuries:\n` + homeScore.injuryDetails.join('\n');
+    }
+    if (awayScore.injuryDetails && awayScore.injuryDetails.length > 0) {
+      fullReasoning += `\n\n${game.away_team} Injuries:\n` + awayScore.injuryDetails.join('\n');
+    }
+    
     return {
       game_id: game.id,
       home_team: game.home_team,
@@ -469,7 +816,7 @@ export async function predictGame(game: GameOdds): Promise<GamePrediction | null
       value_score: valueScore,
       recommended_bet: recommendedBet,
       bet_type: betType,
-      reasoning: reasoning,
+      reasoning: fullReasoning,
     };
   } catch (error) {
     console.error(`Error predicting game ${game.home_team} vs ${game.away_team}:`, error);
@@ -499,14 +846,13 @@ export async function savePrediction(
       }
     }
     
-    const homeScore = await calculateTeamScore(
-      await getTeamStats(prediction.home_team) || {} as NFLTeamStats,
-      true
-    );
-    const awayScore = await calculateTeamScore(
-      await getTeamStats(prediction.away_team) || {} as NFLTeamStats,
-      false
-    );
+    const homeStats = await getTeamStats(prediction.home_team) || {} as NFLTeamStats;
+    const awayStats = await getTeamStats(prediction.away_team) || {} as NFLTeamStats;
+    const homeAbbr = TEAM_NAME_TO_ABBR[prediction.home_team] || prediction.home_team;
+    const awayAbbr = TEAM_NAME_TO_ABBR[prediction.away_team] || prediction.away_team;
+    
+    const homeScore = await calculateTeamScore(homeStats, true, homeAbbr, prediction.home_team);
+    const awayScore = await calculateTeamScore(awayStats, false, awayAbbr, prediction.away_team);
     
     // Try primary table 'predictions'; if missing, fallback to 'spread_predictions'
     let { error } = await supabase

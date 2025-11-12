@@ -288,11 +288,10 @@ export async function scrapeProFootballReference(
       console.log(`      Ratings: Off ${osrs.toFixed(2)} | Def ${dsrs.toFixed(2)} | SoS ${sos.toFixed(2)}`);
       
       // Note: Yards per play and turnover differential would need additional tables
-      // For now, setting reasonable defaults based on ratings
-      // These can be scraped from other PFR tables if needed
-      stats.yards_per_play_offense = 5.5 + (osrs / 10); // Estimate from rating
-      stats.yards_per_play_defense = 5.5 - (dsrs / 10); // Estimate from rating
-      stats.turnover_differential = Math.round((wins - losses) / 2); // Rough estimate
+      // NO ESTIMATIONS - leave as undefined if not available
+      stats.yards_per_play_offense = undefined; // Not available, don't estimate
+      stats.yards_per_play_defense = undefined; // Use team_defense_stats instead
+      stats.turnover_differential = undefined;  // Not available, don't estimate
     } else {
       console.log(`   ⚠️  Could not find ${pfrTeamName} in stats table`);
     }
@@ -421,10 +420,10 @@ function generateFallbackStats(
     point_differential: Math.round((wins - losses) * 3),
     margin_of_victory: (wins - losses) * 0.5,
     
-    // Efficiency stats
-    yards_per_play_offense: 5.0 + (winPct * 1.5),
-    yards_per_play_defense: 5.5 - (winPct * 1.0),
-    turnover_differential: Math.round((wins - losses) * 0.5),
+    // Efficiency stats - NO ESTIMATIONS
+    yards_per_play_offense: undefined, // Not available
+    yards_per_play_defense: undefined, // Use team_defense_stats
+    turnover_differential: undefined,  // Not available
     
     // Advanced metrics (estimates)
     strength_of_schedule: 0.0,
@@ -481,10 +480,10 @@ export async function fetchComprehensiveTeamStats(
         point_differential: realStats.point_differential || 0,
         margin_of_victory: realStats.margin_of_victory || 0,
         
-        // Efficiency stats
-        yards_per_play_offense: realStats.yards_per_play_offense || 5.5,
-        yards_per_play_defense: realStats.yards_per_play_defense || 5.5,
-        turnover_differential: realStats.turnover_differential || 0,
+        // Efficiency stats - NO ESTIMATIONS
+        yards_per_play_offense: realStats.yards_per_play_offense || undefined,
+        yards_per_play_defense: realStats.yards_per_play_defense || undefined,
+        turnover_differential: realStats.turnover_differential || undefined,
         
         // Advanced metrics
         strength_of_schedule: realStats.strength_of_schedule || 0,
@@ -672,10 +671,10 @@ export async function getTeamStats(
       offensive_rating: data.offensive_srs || 0,
       defensive_rating: data.defensive_srs || 0,
       
-      // Optional calculated fields - use estimates from ratings
-      yards_per_play_offense: 5.5 + ((data.offensive_srs || 0) / 10),
-      yards_per_play_defense: 5.5 - ((data.defensive_srs || 0) / 10),
-      turnover_differential: Math.round((data.wins - data.losses) / 2),
+      // Optional calculated fields - NO ESTIMATIONS, use undefined if not available
+      yards_per_play_offense: undefined, // Not in database, don't estimate
+      yards_per_play_defense: undefined, // Use team_defense_stats table instead
+      turnover_differential: undefined,  // Not in database, don't estimate
       home_record: undefined,
       away_record: undefined,
       last_3_games_performance: undefined,

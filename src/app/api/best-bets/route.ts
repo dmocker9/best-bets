@@ -49,23 +49,59 @@ export async function GET(request: Request) {
 		if (typeParam) console.log(`   Type: ${typeParam}`);
 		console.log(`${'='.repeat(60)}\n`);
 
-		// Initial fetch
-		let predictions = await getBestBetsFromDatabase(limit, week, season);
-
-		// Optional filter: spreads only
-		if (typeParam === 'spreads') {
-			predictions = (predictions || []).filter((p: any) => p?.recommended_bet === 'home_spread' || p?.recommended_bet === 'away_spread');
+		// Fetch ALL predictions for the week (including those with recommended_bet='none')
+		// This allows us to rank by quality and show top 5 even if fewer meet strict criteria
+		const { createClient } = await import('@supabase/supabase-js');
+		const supabase = createClient(
+			process.env.NEXT_PUBLIC_SUPABASE_URL!,
+			process.env.SUPABASE_SERVICE_ROLE_KEY!
+		);
+		
+		let query = supabase
+			.from('spread_predictions')
+			.select(`
+				*,
+				odds_bets:game_id (
+					home_team,
+					away_team,
+					home_spread,
+					away_spread,
+					home_price,
+					away_price,
+					commence_time
+				)
+			`)
+			.gte('value_score', 1.5); // Only show picks with 1.5+ edge
+		
+		if (week) query = query.eq('week_number', week);
+		if (season) query = query.eq('season', season);
+		
+		const { data: allPredictions, error: fetchError } = await query;
+		
+		let predictions: any[] = [];
+		
+		if (fetchError) {
+			console.error('Error fetching predictions:', fetchError);
+			predictions = [];
+		} else {
+			// Sort by confidence, but boost picks with exceptional edge (4.0+)
+			predictions = (allPredictions || [])
+				.map((p: any) => ({
+					...p,
+					quality_score: (p.confidence_score || 0) * (Math.min(p.value_score || 0, 7.5)),
+					// Boost score for exceptional edge plays
+					sort_score: p.value_score >= 4.0 ? (p.confidence_score + 10) : p.confidence_score
+				}))
+				.sort((a: any, b: any) => b.sort_score - a.sort_score)
+				.slice(0, limit);
 		}
 
 		// Auto-fallback: if empty AND week provided, generate then retry once
 		if ((!predictions || predictions.length === 0) && typeof week === 'number') {
 			console.log('No predictions found. Triggering auto-generation fallback...');
 			await generateAndSavePredictions(week, season ?? new Date().getFullYear());
-			// Re-query
+			// Re-query (will apply the same filters as above)
 			predictions = await getBestBetsFromDatabase(limit, week, season);
-			if (typeParam === 'spreads') {
-				predictions = (predictions || []).filter((p: any) => p?.recommended_bet === 'home_spread' || p?.recommended_bet === 'away_spread');
-			}
 		}
 
 		console.log(`\n✅ Retrieved from database:`);
@@ -82,7 +118,16 @@ export async function GET(request: Request) {
 			// Format the recommended bet to show team name and spread
 			let formattedBet = pred.recommended_bet;
 			let currentSpread = game?.home_spread;
+			let betStrength = 'value'; // value, good, strong
 			
+			// Determine bet strength based on confidence and edge
+			if (pred.confidence_score >= 75 && pred.value_score >= 3.5) {
+				betStrength = 'strong';
+			} else if (pred.confidence_score >= 65 && pred.value_score >= 2.5) {
+				betStrength = 'good';
+			}
+			
+			// Format the bet recommendation based on type
 			if (pred.recommended_bet === 'home_spread') {
 				formattedBet = `${game?.home_team} ${game?.home_spread}`;
 				currentSpread = game?.home_spread;
@@ -95,6 +140,30 @@ export async function GET(request: Request) {
 			} else if (pred.recommended_bet === 'away_ml') {
 				formattedBet = `${game?.away_team} Moneyline (${game?.away_price})`;
 				currentSpread = game?.away_spread;
+			} else {
+				// For 'none' bets with good edge - determine value side
+				// If model predicts smaller margin than Vegas, value is on underdog
+				const modelMargin = parseFloat(pred.predicted_spread || 0);
+				const vegasHomeSpread = parseFloat(game?.home_spread || 0);
+				
+				// If model thinks it's closer than Vegas, take the underdog
+				if (Math.abs(modelMargin) < Math.abs(vegasHomeSpread)) {
+					// Value on underdog
+					if (vegasHomeSpread > 0) {
+						// Home is underdog
+						formattedBet = `${game?.home_team} ${game?.home_spread}`;
+						currentSpread = game?.home_spread;
+					} else {
+						// Away is underdog
+						formattedBet = `${game?.away_team} ${game?.away_spread}`;
+						currentSpread = game?.away_spread;
+					}
+				} else {
+					// Value on favorite (model predicts bigger margin)
+					formattedBet = `${pred.predicted_winner} ${pred.predicted_winner === game?.home_team ? game?.home_spread : game?.away_spread}`;
+					currentSpread = pred.predicted_winner === game?.home_team ? game?.home_spread : game?.away_spread;
+				}
+				betStrength = 'value';
 			}
 			
 			return {
@@ -113,10 +182,12 @@ export async function GET(request: Request) {
 				value_score: pred.value_score,
 				recommended_bet: formattedBet,
 				bet_type: pred.recommended_bet,
+				bet_strength: betStrength, // strong, good, value, insight
 				reasoning: pred.reasoning,
 				week_number: pred.week_number,
 				season: pred.season,
 				created_at: pred.created_at,
+				quality_score: (pred.confidence_score || 0) * (Math.min(pred.value_score || 0, 7.5)),
 				// Include full team stats for detailed analysis
 				home_stats: homeStats,
 				away_stats: awayStats,
@@ -126,9 +197,9 @@ export async function GET(request: Request) {
 		const response: BestBetsResponse = {
 			success: true,
 			message: predictions.length > 0 
-				? `Found ${predictions.length} recommended bet${predictions.length > 1 ? 's' : ''}`
+				? `Found ${predictions.length} ${typeParam === 'spreads' ? 'spread' : ''} bet${predictions.length > 1 ? 's' : ''} with 1.5+ point edge`
 				: (typeof week === 'number' 
-					? 'No predictions available after generation.' 
+					? 'No bets meet our criteria this week. The model is conservative and only recommends high-value plays.' 
 					: 'No predictions available. Provide week param to auto-generate.'),
 			predictions: formattedPredictions,
 			analyzed: predictions.length,
