@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { getTeamLogo } from '@/lib/espnTeamLogos';
 
 interface GameResult {
   id: string;
@@ -228,9 +229,17 @@ export function GameResultsDisplay() {
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className={`text-lg font-bold ${isBetOfWeek ? 'text-yellow-400' : 'text-white'}`}>
-                          {game.away_team} @ {game.home_team}
-                        </span>
+                        <div className="flex items-center gap-2 text-lg">
+                          <img src={getTeamLogo(game.away_team)} alt={game.away_team} className="w-6 h-6 object-contain" />
+                          <span className={`font-bold ${isBetOfWeek ? 'text-yellow-400' : 'text-white'}`}>
+                            {game.away_team}
+                          </span>
+                          <span className="text-gray-500 text-base">@</span>
+                          <span className={`font-bold ${isBetOfWeek ? 'text-yellow-400' : 'text-white'}`}>
+                            {game.home_team}
+                          </span>
+                          <img src={getTeamLogo(game.home_team)} alt={game.home_team} className="w-6 h-6 object-contain" />
+                        </div>
                         <span className="text-xs text-gray-400">Week {game.week_number}</span>
                         {isBetOfWeek && (
                           <span className="px-2 py-0.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black text-xs font-bold rounded-md shadow-lg">
@@ -262,6 +271,7 @@ export function GameResultsDisplay() {
                 <div className="bg-gray-900/50 rounded-lg p-3 mb-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
+                      <img src={getTeamLogo(game.away_team)} alt={game.away_team} className="w-8 h-8 object-contain" />
                       <span
                         className={`text-xl font-bold ${
                           game.winner === game.away_team ? 'text-green-400' : 'text-gray-400'
@@ -269,11 +279,11 @@ export function GameResultsDisplay() {
                       >
                         {game.away_team}
                       </span>
-                      <span className="text-2xl font-bold text-white">{game.away_score}</span>
+                      <span className="text-3xl font-bold text-white">{game.away_score}</span>
                     </div>
-                    <span className="text-gray-500">-</span>
+                    <span className="text-gray-500 text-xl">-</span>
                     <div className="flex items-center gap-3">
-                      <span className="text-2xl font-bold text-white">{game.home_score}</span>
+                      <span className="text-3xl font-bold text-white">{game.home_score}</span>
                       <span
                         className={`text-xl font-bold ${
                           game.winner === game.home_team ? 'text-green-400' : 'text-gray-400'
@@ -281,12 +291,15 @@ export function GameResultsDisplay() {
                       >
                         {game.home_team}
                       </span>
+                      <img src={getTeamLogo(game.home_team)} alt={game.home_team} className="w-8 h-8 object-contain" />
                     </div>
                   </div>
-                  <div className="text-center mt-2">
-                    <span className="text-sm text-gray-400">
-                      Winner: <span className="text-green-400 font-semibold">{game.winner}</span>
-                    </span>
+                  <div className="text-center mt-3">
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-sm text-gray-400">Winner:</span>
+                      <img src={getTeamLogo(game.winner)} alt={game.winner} className="w-6 h-6 object-contain" />
+                      <span className="text-green-400 font-semibold text-base">{game.winner}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -468,4 +481,5 @@ export function GameResultsDisplay() {
     </div>
   );
 }
+
 

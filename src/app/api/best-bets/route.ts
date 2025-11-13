@@ -71,7 +71,7 @@ export async function GET(request: Request) {
 					commence_time
 				)
 			`)
-			.gte('value_score', 1.5); // Only show picks with 1.5+ edge
+			.gte('value_score', 1.3); // Only show picks with 1.3+ edge
 		
 		if (week) query = query.eq('week_number', week);
 		if (season) query = query.eq('season', season);
@@ -197,7 +197,7 @@ export async function GET(request: Request) {
 		const response: BestBetsResponse = {
 			success: true,
 			message: predictions.length > 0 
-				? `Found ${predictions.length} ${typeParam === 'spreads' ? 'spread' : ''} bet${predictions.length > 1 ? 's' : ''} with 1.5+ point edge`
+				? `Found ${predictions.length} ${typeParam === 'spreads' ? 'spread' : ''} bet${predictions.length > 1 ? 's' : ''} with betting value`
 				: (typeof week === 'number' 
 					? 'No bets meet our criteria this week. The model is conservative and only recommends high-value plays.' 
 					: 'No predictions available. Provide week param to auto-generate.'),
@@ -210,7 +210,9 @@ export async function GET(request: Request) {
 		return NextResponse.json(response, {
 			status: 200,
 			headers: {
-				'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+				'Cache-Control': 'no-cache, no-store, must-revalidate',
+				'Pragma': 'no-cache',
+				'Expires': '0'
 			},
 		});
 	} catch (error) {

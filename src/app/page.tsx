@@ -127,9 +127,13 @@ export default function Home() {
 
         {/* Sport Tab */}
         <div className="flex gap-4 mb-8">
-          <button className="relative flex items-center gap-3 bg-[#1a1f2e] px-6 py-3 rounded-lg border-2 border-blue-500 hover:scale-105 hover:border-blue-400 transition-all duration-200 shadow-lg shadow-blue-500/20">
-            <span className="text-2xl">🏈</span>
-            <span className="text-lg font-medium">NFL</span>
+          <button className="relative flex items-center gap-4 bg-[#1a1f2e] px-8 py-4 rounded-lg border-2 border-blue-500 hover:scale-105 hover:border-blue-400 transition-all duration-200 shadow-lg shadow-blue-500/20">
+            <img 
+              src="https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png" 
+              alt="NFL" 
+              className="w-12 h-12 object-contain"
+            />
+            <span className="text-xl font-semibold">NFL</span>
           </button>
         </div>
 

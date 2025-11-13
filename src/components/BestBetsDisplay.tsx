@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { getTeamLogo } from '@/lib/espnTeamLogos';
 
 interface TeamStats {
   team_name: string;
@@ -192,9 +193,13 @@ export function BestBetsDisplay() {
                           #{index + 1}
                         </span>
                         <div>
-                          <p className="text-lg font-semibold text-white">
-                            {prediction.away_team} @ {prediction.home_team}
-                          </p>
+                          <div className="flex items-center gap-2 text-xl font-semibold text-white">
+                            <img src={getTeamLogo(prediction.away_team)} alt={prediction.away_team} className="w-7 h-7 object-contain" />
+                            <span>{prediction.away_team}</span>
+                            <span className="text-gray-500 text-base">@</span>
+                            <span>{prediction.home_team}</span>
+                            <img src={getTeamLogo(prediction.home_team)} alt={prediction.home_team} className="w-7 h-7 object-contain" />
+                          </div>
                           <p className="text-xs text-gray-400">
                             {(() => {
                               const date = new Date(prediction.commence_time);
@@ -272,9 +277,29 @@ export function BestBetsDisplay() {
                       </span>
                       {prediction.bet_strength === 'strong' && <span className="text-xs bg-green-500 text-black px-2 py-0.5 rounded font-bold">⭐ TOP PICK</span>}
                     </div>
-                    <p className="text-xl font-bold text-white mb-2">
-                      {prediction.recommended_bet}
-                    </p>
+                    <div className="flex items-center gap-3 mb-2">
+                      {(() => {
+                        // Extract team name from recommended bet (e.g., "New York Giants +7" or "Bills -3.5")
+                        const bet = prediction.recommended_bet || '';
+                        let teamName = '';
+                        
+                        // Try to match team name (everything before +/- or "Moneyline")
+                        if (bet.includes('Moneyline')) {
+                          teamName = bet.replace('Moneyline', '').trim();
+                        } else {
+                          // Match everything before the last +/- sign
+                          const match = bet.match(/^(.+?)(?:\s+[-+]\d)/);
+                          teamName = match ? match[1].trim() : bet;
+                        }
+                        
+                        return (
+                          <>
+                            <img src={getTeamLogo(teamName)} alt={teamName} className="w-10 h-10 object-contain" />
+                            <p className="text-2xl font-bold text-white">{bet}</p>
+                          </>
+                        );
+                      })()}
+                    </div>
                     
                     {/* Simple one-sentence summary */}
                     <p className="text-sm text-gray-300 mb-3">
@@ -347,7 +372,10 @@ export function BestBetsDisplay() {
                         <div className="grid grid-cols-2 gap-4">
                           {/* Home Team */}
                           <div className="space-y-3">
-                            <h4 className="font-bold text-blue-300 text-base">{prediction.home_team}</h4>
+                            <div className="flex items-center gap-2">
+                              <img src={getTeamLogo(prediction.home_team)} alt={prediction.home_team} className="w-7 h-7 object-contain" />
+                              <h4 className="font-bold text-blue-300 text-lg">{prediction.home_team}</h4>
+                            </div>
                             <div className="space-y-2 text-xs">
                               <div className="bg-gray-900/50 p-2 rounded">
                                 <div className="flex justify-between mb-1">
@@ -410,7 +438,10 @@ export function BestBetsDisplay() {
 
                           {/* Away Team */}
                           <div className="space-y-3">
-                            <h4 className="font-bold text-blue-300 text-base">{prediction.away_team}</h4>
+                            <div className="flex items-center gap-2">
+                              <img src={getTeamLogo(prediction.away_team)} alt={prediction.away_team} className="w-7 h-7 object-contain" />
+                              <h4 className="font-bold text-blue-300 text-lg">{prediction.away_team}</h4>
+                            </div>
                             <div className="space-y-2 text-xs">
                               <div className="bg-gray-900/50 p-2 rounded">
                                 <div className="flex justify-between mb-1">
@@ -530,9 +561,15 @@ export function BestBetsDisplay() {
                     </div>
                     <div className="bg-gray-900 rounded p-2">
                       <p className="text-gray-400 text-xs mb-1">Moneylines</p>
-                      <div className="text-white font-semibold text-xs space-y-0.5">
-                        <div>{prediction.away_team} {prediction.away_moneyline}</div>
-                        <div>{prediction.home_team} {prediction.home_moneyline}</div>
+                      <div className="text-white font-semibold text-sm space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <img src={getTeamLogo(prediction.away_team)} alt={prediction.away_team} className="w-5 h-5 object-contain" />
+                          <span>{prediction.away_team} {prediction.away_moneyline}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <img src={getTeamLogo(prediction.home_team)} alt={prediction.home_team} className="w-5 h-5 object-contain" />
+                          <span>{prediction.home_team} {prediction.home_moneyline}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
