@@ -384,7 +384,7 @@ export function GameResultsDisplay() {
                                   const actualMargin = game.home_score - game.away_score;
                                   const bet = game.prediction.recommended_bet;
                                   if (bet === 'home_spread') {
-                                    const spreadStr = game.odds_bets.home_spread || '0';
+                                    const spreadStr = String(game.odds_bets.home_spread || '0');
                                     const spread = parseFloat(spreadStr.replace(/[^\d.-]/g, '') || '0');
                                     if (spread < 0) {
                                       // Home favored
@@ -394,7 +394,7 @@ export function GameResultsDisplay() {
                                       return `${game.home_team} ${game.home_score > game.away_score ? 'won' : 'covered'} with the ${spread}-point spread`;
                                     }
                                   } else if (bet === 'away_spread') {
-                                    const spreadStr = game.odds_bets.away_spread || '0';
+                                    const spreadStr = String(game.odds_bets.away_spread || '0');
                                     const spread = parseFloat(spreadStr.replace(/[^\d.-]/g, '') || '0');
                                     if (game.away_score > game.home_score) {
                                       if (spread < 0) {
