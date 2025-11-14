@@ -426,7 +426,7 @@ export function GameResultsDisplay() {
                                   const actualMargin = game.home_score - game.away_score;
                                   const bet = game.prediction.recommended_bet;
                                   if (bet === 'home_spread') {
-                                    const spreadStr = game.odds_bets.home_spread || '0';
+                                    const spreadStr = String(game.odds_bets.home_spread || '0');
                                     const spread = parseFloat(spreadStr.replace(/[^\d.-]/g, '') || '0');
                                     if (spread < 0) {
                                       // Home favored but didn't cover
@@ -436,7 +436,7 @@ export function GameResultsDisplay() {
                                       return `${game.home_team} lost by ${Math.abs(actualMargin)} pts and did not cover the ${spread}-point spread`;
                                     }
                                   } else if (bet === 'away_spread') {
-                                    const spreadStr = game.odds_bets.away_spread || '0';
+                                    const spreadStr = String(game.odds_bets.away_spread || '0');
                                     const spread = parseFloat(spreadStr.replace(/[^\d.-]/g, '') || '0');
                                     if (spread < 0) {
                                       // Away favored but didn't cover
