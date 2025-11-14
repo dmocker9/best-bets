@@ -52,10 +52,14 @@ export async function GET(request: Request) {
 		// Fetch ALL predictions for the week (including those with recommended_bet='none')
 		// This allows us to rank by quality and show top 5 even if fewer meet strict criteria
 		const { createClient } = await import('@supabase/supabase-js');
-		const supabase = createClient(
-			process.env.NEXT_PUBLIC_SUPABASE_URL!,
-			process.env.SUPABASE_SERVICE_ROLE_KEY!
-		);
+		const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+		const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+		
+		if (!supabaseUrl || !supabaseServiceKey) {
+			throw new Error('Missing Supabase environment variables');
+		}
+		
+		const supabase = createClient(supabaseUrl, supabaseServiceKey);
 		
 		let query = supabase
 			.from('spread_predictions')

@@ -9,9 +9,7 @@ function getSupabaseClient() {
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
     
     if (!supabaseUrl || !supabaseAnonKey) {
-      // Return a mock client during build time
-      // This will be replaced with the real client at runtime
-      return createClient('https://placeholder.supabase.co', 'placeholder-key');
+      throw new Error('Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set');
     }
     
     supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
@@ -19,10 +17,11 @@ function getSupabaseClient() {
   return supabaseClient;
 }
 
-// Export as a getter to ensure lazy initialization
-export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
-  get(_target, prop) {
-    return getSupabaseClient()[prop as keyof ReturnType<typeof createClient>];
-  }
-});
+// Export a function that returns the client (safer than Proxy)
+export function getSupabase() {
+  return getSupabaseClient();
+}
+
+// Also export as a direct client for backward compatibility (but it will throw if env vars aren't set)
+export const supabase = getSupabaseClient();
 
