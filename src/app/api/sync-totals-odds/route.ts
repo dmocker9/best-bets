@@ -98,7 +98,7 @@ export async function GET() {
     if (totalsOddsData.length > 0) {
       const { data, error } = await supabase
         .from("totals_odds")
-        .upsert(totalsOddsData, {
+        .upsert(totalsOddsData as any, {
           onConflict: "game_id,bookmaker",
           ignoreDuplicates: false,
         });
