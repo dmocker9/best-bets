@@ -504,9 +504,9 @@ export async function generateAndSaveTotalsPredictions(
         acc[game.game_id] = game;
       }
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, TotalsOdds>);
     
-    const gamesList = Object.values(uniqueGames);
+    const gamesList: TotalsOdds[] = Object.values(uniqueGames);
     result.total = gamesList.length;
     console.log(`📊 Analyzing ${gamesList.length} upcoming games...\n`);
     
