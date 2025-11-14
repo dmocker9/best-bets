@@ -1,5 +1,17 @@
 import { NextResponse } from 'next/server';
 import { getBestPropBets } from '@/lib/predictPlayerProps';
+import { createClient } from '@supabase/supabase-js';
+
+const getSupabaseClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase environment variables');
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey);
+};
 
 export const dynamic = 'force-dynamic';
 
@@ -49,8 +61,37 @@ export async function GET(request: Request) {
     if (marketParam) console.log(`   Market: ${marketParam}`);
     console.log(`${'='.repeat(60)}\n`);
     
-    // Get best prop bets from database (fetch more to allow for deduplication)
-    let predictions = await getBestPropBets(limit * 3, week, season);
+    // Special handling for Week 11, Season 2025 - prioritize our 10 curated picks
+    const curatedPropIds = [5211, 5326, 5205, 5176, 5248, 5066, 4417, 5270, 5274, 5219];
+    const isCuratedWeek = week === 11 && season === 2025;
+    
+    let predictions: any[] = [];
+    
+    if (isCuratedWeek) {
+      // For Week 11, prioritize our 10 curated picks first
+      const supabase = getSupabaseClient();
+      const { data: curatedPredictions } = await supabase
+        .from('player_prop_predictions')
+        .select('*')
+        .in('prop_id', curatedPropIds)
+        .eq('week_number', week)
+        .eq('season', season)
+        .not('recommended_bet', 'is', null)
+        .gte('confidence_score', 60);
+      
+      // Get other predictions to fill remaining slots
+      const otherPredictions = await getBestPropBets(limit * 3, week, season);
+      
+      // Filter out curated picks from other predictions to avoid duplicates
+      const curatedPropIdSet = new Set(curatedPropIds);
+      const filteredOther = otherPredictions.filter(p => !curatedPropIdSet.has(p.prop_id));
+      
+      // Combine: curated picks first, then others
+      predictions = [...(curatedPredictions || []), ...filteredOther];
+    } else {
+      // Get best prop bets from database (fetch more to allow for deduplication)
+      predictions = await getBestPropBets(limit * 3, week, season);
+    }
     
     // Apply additional filters if provided
     if (positionParam) {
@@ -71,20 +112,50 @@ export async function GET(request: Request) {
         ...p,
         quality_score: p.confidence_score * Math.min(Math.abs(p.value_score || 0), 10)
       }))
-      .sort((a, b) => b.quality_score - a.quality_score);
+      .sort((a, b) => {
+        // If it's curated week, prioritize curated picks
+        if (isCuratedWeek) {
+          const aIsCurated = curatedPropIds.includes(a.prop_id);
+          const bIsCurated = curatedPropIds.includes(b.prop_id);
+          if (aIsCurated && !bIsCurated) return -1;
+          if (!aIsCurated && bIsCurated) return 1;
+          // If both are curated, sort by confidence score (descending)
+          if (aIsCurated && bIsCurated) {
+            return b.confidence_score - a.confidence_score;
+          }
+        }
+        return b.quality_score - a.quality_score;
+      });
     
-    // DEDUPLICATE: Keep only the best prop for each player
+    // DEDUPLICATE: Keep only the best prop for each player (but preserve all curated picks)
+    const curatedSet = new Set(curatedPropIds);
     const seenPlayers = new Set<string>();
-    const uniquePredictions = predictions.filter(p => {
-      if (seenPlayers.has(p.player_name)) {
-        return false; // Skip this player, we already have their best prop
-      }
-      seenPlayers.add(p.player_name);
-      return true; // Keep this (first/best prop for this player)
-    });
+    const uniquePredictions: any[] = [];
+    const curatedPredictions: any[] = [];
     
-    // Take top 10 unique players
-    predictions = uniquePredictions.slice(0, limit);
+    for (const p of predictions) {
+      const isCurated = curatedSet.has(p.prop_id);
+      
+      if (isCurated) {
+        // Always include curated picks, even if we've seen the player before
+        curatedPredictions.push(p);
+      } else {
+        // For non-curated picks, deduplicate by player name
+        if (!seenPlayers.has(p.player_name)) {
+          seenPlayers.add(p.player_name);
+          uniquePredictions.push(p);
+        }
+      }
+    }
+    
+    // Combine: curated picks first (sorted by confidence), then others
+    if (isCuratedWeek) {
+      // Sort curated picks by confidence score (descending)
+      curatedPredictions.sort((a, b) => b.confidence_score - a.confidence_score);
+      predictions = [...curatedPredictions, ...uniquePredictions].slice(0, limit);
+    } else {
+      predictions = uniquePredictions.slice(0, limit);
+    }
     
     console.log(`\n✅ Retrieved ${predictions.length} unique player prop recommendations\n`);
     

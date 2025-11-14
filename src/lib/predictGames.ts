@@ -263,13 +263,13 @@ async function calculateInjuryImpact(teamAbbr: string): Promise<{
   const supabase = getSupabaseClient();
   
   try {
-    // Get injured players who are NOT on track to play
+    // Get injured players who are OUT (game_status = 'Out')
     const { data: injuries, error: injuryError } = await supabase
       .from('injuries')
-      .select('player_name, position, team_abbr, on_track_to_play, game_status')
+      .select('player_name, position, team_abbr, game_status')
       .eq('team_abbr', teamAbbr)
       .eq('season', 2025)
-      .eq('on_track_to_play', false); // Only players NOT on track
+      .eq('game_status', 'Out'); // Only players with game_status = 'Out'
     
     if (injuryError || !injuries || injuries.length === 0) {
       return { 

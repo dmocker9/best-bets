@@ -18,7 +18,6 @@ interface InjuryRecord {
   gameStatus: string | null;
   injuryComment: string | null;
   practiceStatus: string | null;
-  onTrackToPlay: boolean;
 }
 
 function getSupabaseClient() {
@@ -32,17 +31,7 @@ function getSupabaseClient() {
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
-function isOnTrackToPlay(practiceStatus: string | null): boolean {
-  if (!practiceStatus) return false;
-  
-  const status = practiceStatus.toLowerCase();
-  
-  if (status.includes('full participation') || status.includes('full practice')) return true;
-  if (status.includes('limited participation') || status.includes('limited practice')) return true;
-  if (status.includes('did not participate') || status.includes('did not practice')) return false;
-  
-  return false;
-}
+// Removed isOnTrackToPlay function - players are only considered "out" if game_status = 'Out'
 
 async function scrapeInjuryData(): Promise<InjuryRecord[]> {
   console.log('🔍 Scraping injury data from Pro Football Reference...\n');
@@ -166,8 +155,6 @@ async function scrapeInjuryData(): Promise<InjuryRecord[]> {
       
       validRows++;
       
-      const onTrackToPlay = isOnTrackToPlay(practiceStatus);
-      
       injuries.push({
         playerName,
         teamAbbr,
@@ -175,7 +162,6 @@ async function scrapeInjuryData(): Promise<InjuryRecord[]> {
         gameStatus: gameStatus || null,
         injuryComment: injuryComment || null,
         practiceStatus: practiceStatus || null,
-        onTrackToPlay,
       });
     });
     
@@ -241,7 +227,6 @@ async function saveToSupabase(supabase: any, injuries: InjuryRecord[], weekNumbe
       game_status: injury.gameStatus,
       injury_comment: injury.injuryComment,
       practice_status: injury.practiceStatus,
-      on_track_to_play: injury.onTrackToPlay,
       week_number: currentWeek,
       season: 2025,
     };
@@ -279,8 +264,6 @@ function displaySummary(injuries: InjuryRecord[]) {
   const outPlayers = injuries.filter(i => i.gameStatus?.toLowerCase() === 'out');
   const questionable = injuries.filter(i => i.gameStatus?.toLowerCase() === 'questionable');
   const doubtful = injuries.filter(i => i.gameStatus?.toLowerCase() === 'doubtful');
-  const onTrack = injuries.filter(i => i.onTrackToPlay);
-  const notOnTrack = injuries.filter(i => !i.onTrackToPlay);
   
   // Count by team
   const teamCounts = new Map<string, number>();
@@ -297,10 +280,6 @@ function displaySummary(injuries: InjuryRecord[]) {
   console.log(`  • Doubtful: ${doubtful.length}`);
   console.log(`  • No designation: ${injuries.length - outPlayers.length - questionable.length - doubtful.length}`);
   
-  console.log(`\n🏃 Practice Status:`);
-  console.log(`  • On Track to Play ✅: ${onTrack.length} (${((onTrack.length/injuries.length)*100).toFixed(1)}%)`);
-  console.log(`  • Not On Track ❌: ${notOnTrack.length} (${((notOnTrack.length/injuries.length)*100).toFixed(1)}%)`);
-  
   if (outPlayers.length > 0) {
     console.log(`\n🚨 RULED OUT (showing first 15):`);
     outPlayers
@@ -315,8 +294,7 @@ function displaySummary(injuries: InjuryRecord[]) {
     questionable
       .slice(0, 10)
       .forEach(i => {
-        const track = i.onTrackToPlay ? '✅' : '❌';
-        console.log(`   ${track} ${i.playerName.padEnd(25)} ${i.position.padEnd(4)} (${i.teamAbbr}) - ${i.injuryComment || 'N/A'}`);
+        console.log(`   ❓ ${i.playerName.padEnd(25)} ${i.position.padEnd(4)} (${i.teamAbbr}) - ${i.injuryComment || 'N/A'}`);
       });
   }
   

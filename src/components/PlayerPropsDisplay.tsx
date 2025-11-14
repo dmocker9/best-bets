@@ -87,6 +87,107 @@ function PropCard({
     return marketMap[market] || market;
   };
 
+  const getPositionColor = (position: string) => {
+    const positionColors: Record<string, { bg: string; text: string; border: string }> = {
+      'QB': { bg: 'bg-blue-900/40', text: 'text-blue-300', border: 'border-blue-500' },
+      'RB': { bg: 'bg-green-900/40', text: 'text-green-300', border: 'border-green-500' },
+      'WR': { bg: 'bg-purple-900/40', text: 'text-purple-300', border: 'border-purple-500' },
+      'TE': { bg: 'bg-orange-900/40', text: 'text-orange-300', border: 'border-orange-500' },
+    };
+    return positionColors[position] || { bg: 'bg-gray-700', text: 'text-gray-300', border: 'border-gray-600' };
+  };
+
+  const formatAnalysisLine = (line: string, sectionColor: string) => {
+    // Color mapping for Tailwind classes
+    const colorClasses = {
+      blue: {
+        bullet: 'text-blue-400',
+        label: 'text-blue-300',
+      },
+      purple: {
+        bullet: 'text-purple-400',
+        label: 'text-purple-300',
+      },
+      green: {
+        bullet: 'text-green-400',
+        label: 'text-green-300',
+      },
+    };
+    
+    const colors = colorClasses[sectionColor as keyof typeof colorClasses] || colorClasses.blue;
+
+    // List of labels to highlight
+    const labels = [
+      'Vegas Lines:',
+      'Expected Game Flow:',
+      'Key Injuries:',
+      'Net Injury Impact:',
+      'Key Defensive Factors:',
+      'Matchup Impact:',
+      'Consistency Analysis:',
+      'Performance vs Line:',
+      'Season Performance',
+      'Defensive Ranking:',
+      'Matchup Adjustment:',
+      'Game Script Adjustment:',
+      'Injury Adjustment:',
+      'Final Projection Calculation:',
+      'Expected Prediction:',
+    ];
+
+    // Check if line starts with any label
+    for (const label of labels) {
+      if (line.startsWith(label)) {
+        const restOfLine = line.substring(label.length).trim();
+        return (
+          <div className="flex items-start gap-2">
+            <span className={colors.bullet}>•</span>
+            <span className="flex-1">
+              <span className={`font-bold ${colors.label} text-sm`}>{label}</span>
+              {restOfLine && <span className="text-gray-300"> {restOfLine}</span>}
+            </span>
+          </div>
+        );
+      }
+    }
+
+    // Check if line contains a label (for labels in the middle of text)
+    let formattedLine = line;
+    labels.forEach(label => {
+      const regex = new RegExp(`(${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      formattedLine = formattedLine.replace(regex, (match) => {
+        return `**${match}**`;
+      });
+    });
+
+    // Split by ** to handle bold formatting
+    if (formattedLine.includes('**')) {
+      const parts = formattedLine.split('**');
+      return (
+        <div className="flex items-start gap-2">
+          <span className={colors.bullet}>•</span>
+          <span className="flex-1">
+            {parts.map((part, idx) => {
+              if (idx % 2 === 1) {
+                // This is a label to bold
+                return <span key={idx} className={`font-bold ${colors.label} text-sm`}>{part}</span>;
+              }
+              return <span key={idx} className="text-gray-300">{part}</span>;
+            })}
+          </span>
+        </div>
+      );
+    }
+
+    // Regular line
+    return (
+      <div className="flex items-start gap-2">
+        <span className={colors.bullet}>•</span>
+        <span className="flex-1 text-gray-300">{line}</span>
+      </div>
+    );
+  };
+
   const getRecommendationColor = () => {
     if (prop.confidence_score >= 75) return { bg: 'bg-green-900/20', border: 'border-green-700', text: 'text-green-400' };
     if (prop.confidence_score >= 70) return { bg: 'bg-blue-900/20', border: 'border-blue-700', text: 'text-blue-400' };
@@ -125,9 +226,14 @@ function PropCard({
                   {prop.player_name}
                 </h3>
                 <div className="flex items-center gap-3">
-                  <span className="px-3 py-1 bg-gray-700 text-gray-300 rounded-full text-sm font-bold">
-                    {prop.position}
-                  </span>
+                  {(() => {
+                    const posColors = getPositionColor(prop.position);
+                    return (
+                      <span className={`px-3 py-1 ${posColors.bg} ${posColors.text} border ${posColors.border} rounded-full text-sm font-bold`}>
+                        {prop.position}
+                      </span>
+                    );
+                  })()}
                   {/* Team Matchup with Logos */}
                   <div className="flex items-center gap-2 text-base text-gray-400">
                     <img src={getTeamLogo(prop.team)} alt={prop.team} className="w-6 h-6 object-contain" />
@@ -179,12 +285,12 @@ function PropCard({
           </div>
           
           <p className="text-2xl font-bold text-white mb-3">
-            {prop.recommended_bet} {prop.prop_line}
+            {prop.recommended_bet} {prop.prop_line} {formatPropMarket(prop.prop_market)}
           </p>
           
           {/* Quick Summary */}
           <p className="text-sm text-gray-300 mb-3">
-            Model predicts <span className="text-white font-semibold">{prop.predicted_value.toFixed(1)}</span> vs line of <span className="text-white font-semibold">{prop.prop_line}</span>, giving us a <span className={`font-bold ${prop.value_score > 0 ? 'text-green-400' : 'text-red-400'}`}>{Math.abs(prop.value_score).toFixed(1)}-unit edge</span>. Player averaging <span className="text-blue-400 font-semibold">{prop.breakdown.season_avg.toFixed(1)}</span> per game with {prop.confidence_score.toFixed(0)}% confidence.
+            Model predicts <span className="text-white font-semibold">{prop.predicted_value.toFixed(1)}</span> vs line of <span className="text-white font-semibold">{prop.prop_line}</span>, giving us a <span className={`font-bold ${prop.value_score > 0 ? 'text-green-400' : 'text-red-400'}`}>{Math.abs(prop.value_score).toFixed(1)}-unit edge</span>. <span className="text-blue-400 font-semibold">{prop.player_name}</span> averaging <span className="text-blue-400 font-semibold">{prop.breakdown.season_avg.toFixed(1)}</span> per game with {prop.confidence_score.toFixed(0)}% confidence.
           </p>
 
           {/* Stats Grid */}
@@ -308,12 +414,131 @@ function PropCard({
               </div>
             </div>
 
-            {/* Full Detailed Analysis */}
-            <div className="bg-gray-900/30 p-4 rounded border border-gray-700">
-              <h4 className="font-bold text-white mb-3">📋 Complete Analysis:</h4>
-              <div className="text-xs text-gray-300 whitespace-pre-line leading-relaxed">
-                {prop.reasoning}
-              </div>
+            {/* Complete Analysis - Parsed into Sections */}
+            <div className="space-y-4">
+              <h4 className="font-bold text-white text-base mb-2">📋 Complete Analysis:</h4>
+              
+              {/* Parse reasoning into sections */}
+              {(() => {
+                const reasoning = prop.reasoning || '';
+                
+                // Extract Player Stats section (handle both emoji and --- format)
+                const playerStatsMatch = reasoning.match(/(?:📊 PLAYER STATS|--- Player Stats)[^\n]*\n([\s\S]*?)(?=🛡️|🎮|📈|💰|--- Defensive|--- Game|$)/i);
+                const playerStatsContent = playerStatsMatch ? playerStatsMatch[1].trim() : '';
+                
+                // Extract Defensive Matchup section
+                const defenseMatch = reasoning.match(/(?:🛡️ DEFENSIVE MATCHUP|--- Defensive Matchup)[^\n]*\n([\s\S]*?)(?=🎮|📈|💰|--- Game|$)/i);
+                const defenseContent = defenseMatch ? defenseMatch[1].trim() : '';
+                
+                // Extract Game Environment section
+                const gameEnvMatch = reasoning.match(/(?:🎮 GAME ENVIRONMENT|--- Game Environment)[^\n]*\n([\s\S]*?)(?=📈|💰|$)/i);
+                const gameEnvContent = gameEnvMatch ? gameEnvMatch[1].trim() : '';
+                
+                // Extract Final Prediction
+                const finalPredMatch = reasoning.match(/📈 FINAL PREDICTION[^\n]*\n([\s\S]*?)(?=💰|$)/);
+                const finalPredContent = finalPredMatch ? finalPredMatch[1].trim() : '';
+                
+                // Extract Why This Will Hit section
+                const whyMatch = reasoning.match(/💰 WHY[^\n]*\n([\s\S]*?)$/);
+                const whyContent = whyMatch ? whyMatch[1].trim() : '';
+                
+                return (
+                  <>
+                    {/* Player Stats Section (35%) */}
+                    {playerStatsContent && (
+                      <div className="bg-gray-900/50 p-4 rounded-lg border border-blue-700/50">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-2xl">📊</span>
+                          <h5 className="font-bold text-blue-300 text-sm">Player Stats (35% Weight)</h5>
+                          <span className="ml-auto text-xs text-gray-400 bg-blue-900/30 px-2 py-1 rounded">
+                            {prop.breakdown.player_stats_score.toFixed(0)}/100
+                          </span>
+                        </div>
+                        <div className="space-y-1.5 text-xs">
+                          {playerStatsContent.split('\n').filter(line => line.trim()).map((line, idx) => (
+                            <div key={idx}>
+                              {formatAnalysisLine(line.trim(), 'blue')}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Defensive Matchup Section (55%) */}
+                    {defenseContent && (
+                      <div className="bg-gray-900/50 p-4 rounded-lg border border-purple-700/50">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-2xl">🛡️</span>
+                          <h5 className="font-bold text-purple-300 text-sm">Defensive Matchup (55% Weight) ⭐ KEY FACTOR</h5>
+                          <span className="ml-auto text-xs text-gray-400 bg-purple-900/30 px-2 py-1 rounded">
+                            {prop.breakdown.defensive_matchup_score.toFixed(0)}/100
+                          </span>
+                        </div>
+                        <div className="space-y-1.5 text-xs">
+                          {defenseContent.split('\n').filter(line => line.trim()).map((line, idx) => (
+                            <div key={idx}>
+                              {formatAnalysisLine(line.trim(), 'purple')}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Game Environment Section (10%) */}
+                    {gameEnvContent && (
+                      <div className="bg-gray-900/50 p-4 rounded-lg border border-green-700/50">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-2xl">🎮</span>
+                          <h5 className="font-bold text-green-300 text-sm">Game Environment (10% Weight)</h5>
+                          <span className="ml-auto text-xs text-gray-400 bg-green-900/30 px-2 py-1 rounded">
+                            {prop.breakdown.game_environment_score.toFixed(0)}/100
+                          </span>
+                        </div>
+                        <div className="space-y-1.5 text-xs">
+                          {gameEnvContent.split('\n').filter(line => line.trim()).map((line, idx) => (
+                            <div key={idx}>
+                              {formatAnalysisLine(line.trim(), 'green')}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Final Prediction Section */}
+                    {finalPredContent && (
+                      <div className="bg-gradient-to-r from-yellow-900/40 to-amber-900/40 p-4 rounded-lg border-2 border-yellow-500/50">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-2xl">📈</span>
+                          <h5 className="font-bold text-yellow-300 text-sm">Final Prediction</h5>
+                        </div>
+                        <div className="space-y-2 text-xs">
+                          {finalPredContent.split('\n').filter(line => line.trim()).map((line, idx) => (
+                            <div key={idx} className={`flex items-start gap-2 ${
+                              line.includes('Formula:') || line.includes('Predicted') ? 'text-yellow-200 font-semibold' : 'text-gray-300'
+                            }`}>
+                              <span className="text-yellow-400">•</span>
+                              <span className="flex-1">{line.trim()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Why This Will Hit Section */}
+                    {whyContent && (
+                      <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-600">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-2xl">💰</span>
+                          <h5 className="font-bold text-white text-sm">Why This Will Hit</h5>
+                        </div>
+                        <div className="text-xs text-gray-300 leading-relaxed whitespace-pre-line">
+                          {whyContent}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}

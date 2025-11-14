@@ -142,3 +142,4 @@ COMMENT ON TABLE defense_vs_te IS 'Defense performance vs Tight Ends - Pro Footb
 COMMENT ON TABLE defense_vs_wr IS 'Defense performance vs Wide Receivers - Pro Football Reference data';
 COMMENT ON TABLE defense_vs_qb IS 'Defense performance vs Quarterbacks - Pro Football Reference data';
 
+

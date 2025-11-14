@@ -74,3 +74,4 @@ COMMENT ON COLUMN player_passing_stats.adjusted_yards_per_attempt IS 'Y/A adjust
 COMMENT ON COLUMN player_passing_stats.net_yards_per_attempt IS 'Yards per attempt minus sack yards lost';
 COMMENT ON COLUMN player_passing_stats.adjusted_net_yards_per_attempt IS 'NY/A adjusted for TDs and INTs';
 
+
