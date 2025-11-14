@@ -19,3 +19,4 @@ import-*.ts
 !src/**/*.ts
 !src/**/*.tsx
 
+# Build fix
