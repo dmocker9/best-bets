@@ -340,7 +340,12 @@ export function GameResultsDisplay() {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-400">Confidence:</span>
                         <span className="text-yellow-400 font-semibold">
-                          {parseFloat(game.prediction.confidence_score).toFixed(0)}%
+                          {(() => {
+                            const confidence = typeof game.prediction.confidence_score === 'number' 
+                              ? game.prediction.confidence_score 
+                              : parseFloat(String(game.prediction.confidence_score));
+                            return confidence.toFixed(0);
+                          })()}%
                         </span>
                       </div>
                       
