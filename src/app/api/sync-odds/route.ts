@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// Initialize Supabase client (lazy initialization to avoid build-time errors)
+const getSupabaseClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase environment variables');
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey);
+};
 
 // The Odds API configuration
 const ODDS_API_KEY = process.env.ODDS_API_KEY || 'd38b7f712b4ef276d719082f04a4c89e';
@@ -199,6 +205,7 @@ async function syncOddsData(): Promise<SyncResult> {
         console.log(`${'='.repeat(60)}\n`);
 
         // Check if record exists (without throwing error)
+        const supabase = getSupabaseClient();
         const { data: existingRecords, error: selectError } = await supabase
           .from('odds_bets')
           .select('id, api_id')
@@ -255,7 +262,7 @@ async function syncOddsData(): Promise<SyncResult> {
 
         // Upsert the record
         console.log(`\n🔄 Executing upsert...`);
-        const { data: upsertedData, error: upsertError } = await supabase
+        const { data: upsertedData, error: upsertError } = await getSupabaseClient()
           .from('odds_bets')
           .upsert(oddsData, {
             onConflict: 'api_id',
