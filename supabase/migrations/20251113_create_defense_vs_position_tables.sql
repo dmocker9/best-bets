@@ -143,3 +143,4 @@ COMMENT ON TABLE defense_vs_wr IS 'Defense performance vs Wide Receivers - Pro F
 COMMENT ON TABLE defense_vs_qb IS 'Defense performance vs Quarterbacks - Pro Football Reference data';
 
 
+

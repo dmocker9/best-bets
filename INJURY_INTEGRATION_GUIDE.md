@@ -428,3 +428,4 @@ These adjustments align with Vegas line movements when injuries are announced!
 All future predictions will automatically incorporate real-time injury data weighted by snap counts.
 
 
+

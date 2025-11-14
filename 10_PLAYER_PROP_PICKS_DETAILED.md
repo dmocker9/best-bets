@@ -1105,3 +1105,4 @@ _Generated: November 2025_
 _Model Version: 1.0.0 with Dynamic Injury Boost Logic_  
 _Total Analysis: 10 Props, 4 OVER, 6 UNDER_
 
+

@@ -161,3 +161,4 @@
 All picks are based on player stats (35%), defensive matchups (55%), and game environment (10%) with verified spreads from odds_bets table.
 
 
+

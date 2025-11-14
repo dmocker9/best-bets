@@ -235,3 +235,4 @@ The `team_defense_stats` table is now properly populated with accurate, current 
 Your prediction model now has access to comprehensive, accurate defensive statistics directly from Pro Football Reference, improving the quality and reliability of your spread predictions.
 
 
+
