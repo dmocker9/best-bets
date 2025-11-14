@@ -33,6 +33,19 @@ interface Game {
   bookmakers: Bookmaker[];
 }
 
+interface TotalsOddsRecord {
+  game_id: string;
+  home_team: string;
+  away_team: string;
+  commence_time: string;
+  bookmaker: string;
+  over_line: number;
+  over_price: number;
+  under_line: number;
+  under_price: number;
+  last_update: string;
+}
+
 export async function GET() {
   try {
     console.log("Fetching totals odds from Odds API...");
@@ -48,7 +61,7 @@ export async function GET() {
     console.log(`Fetched ${games.length} games from Odds API`);
 
     // Prepare data for insertion (DraftKings only)
-    const totalsOddsData: any[] = [];
+    const totalsOddsData: TotalsOddsRecord[] = [];
 
     games.forEach((game) => {
       // Filter for DraftKings bookmaker only
