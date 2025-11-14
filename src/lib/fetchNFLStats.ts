@@ -562,7 +562,10 @@ export async function syncNFLTeamStats(
 
         // Check if we got real data (scraping successful)
         // Real data will have specific decimal values, not formulaic integers
-        if (stats.points_per_game % 1 !== 0 || stats.yards_per_play_offense % 1 !== 0) {
+        const hasRealPointsData = stats.points_per_game != null && stats.points_per_game % 1 !== 0;
+        const hasRealYardsData = stats.yards_per_play_offense != null && stats.yards_per_play_offense % 1 !== 0;
+        
+        if (hasRealPointsData || hasRealYardsData) {
           result.realDataCount++;
           console.log(`   ✅ VERIFIED: Real data for ${team.displayName}`);
         } else {
