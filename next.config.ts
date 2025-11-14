@@ -2,10 +2,14 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  // Turbopack configuration (Next.js 16+) - empty config to silence warning
+  // Turbopack respects tsconfig.json exclusions, so scripts folder is already excluded
+  turbopack: {},
+  
+  // Webpack configuration (fallback for non-Turbopack builds)
   webpack: (config) => {
     // Exclude scripts folder and utility scripts from TypeScript compilation
     const scriptsPath = path.resolve(__dirname, 'scripts');
-    const rootPath = __dirname;
     
     // Utility script patterns to exclude
     const utilityPatterns = [
