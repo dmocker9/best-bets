@@ -322,8 +322,12 @@ export function GameResultsDisplay() {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-400">Predicted Margin:</span>
                         <span className="text-white font-semibold">
-                          {parseFloat(game.prediction.predicted_spread) > 0 ? '+' : ''}
-                          {parseFloat(game.prediction.predicted_spread).toFixed(1)} pts
+                          {(() => {
+                            const spread = typeof game.prediction.predicted_spread === 'number' 
+                              ? game.prediction.predicted_spread 
+                              : parseFloat(String(game.prediction.predicted_spread));
+                            return (spread > 0 ? '+' : '') + spread.toFixed(1);
+                          })()} pts
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
