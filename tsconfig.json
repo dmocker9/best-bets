@@ -30,12 +30,25 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "next.config.ts",
+    "tailwind.config.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "scrape-*.ts",
+    "fetch-*.ts",
+    "generate-*.ts",
+    "update-*.ts",
+    "fix-*.ts",
+    "restore-*.ts",
+    "recalculate-*.ts",
+    "regenerate-*.ts",
+    "ensure-*.ts",
+    "get-*.ts",
+    "import-*.ts"
   ]
 }

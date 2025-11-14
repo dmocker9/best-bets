@@ -104,13 +104,14 @@ async function main() {
     // Verify
     const { data } = await supabase
       .from('player_prop_predictions')
-      .select('LENGTH(reasoning) as len')
+      .select('reasoning')
       .eq('prop_id', 5219)
       .eq('week_number', 11)
       .eq('season', 2025)
       .maybeSingle();
     
-    console.log(`\n📊 Reasoning length: ${data?.len || 'N/A'} characters`);
+    const reasoningLength = data?.reasoning ? data.reasoning.length : 0;
+    console.log(`\n📊 Reasoning length: ${reasoningLength} characters`);
   }
 }
 
