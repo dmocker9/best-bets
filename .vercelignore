@@ -1,0 +1,21 @@
+# Exclude utility scripts and scripts folder from Vercel build
+scripts/
+scrape-*.ts
+fetch-*.ts
+generate-*.ts
+update-*.ts
+fix-*.ts
+restore-*.ts
+recalculate-*.ts
+regenerate-*.ts
+ensure-*.ts
+get-*.ts
+import-*.ts
+*.md
+*.sql
+*.py
+*.js
+!src/**/*.js
+!src/**/*.ts
+!src/**/*.tsx
+
