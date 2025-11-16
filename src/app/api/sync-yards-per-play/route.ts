@@ -138,7 +138,33 @@ export async function GET(request: Request) {
 		});
 
 		if (plpgRows.length === 0) {
-			throw new Error('Could not find Plays per Game table on page');
+			// Fallback: pick first table that has a Team column and at least 5 numeric-like columns
+			$2('table').each((_, table) => {
+				const $table = $2(table);
+				const headerTexts = $table.find('thead th').map((__, th) => $2(th).text().trim()).get();
+				const hasTeam = headerTexts.some(t => /team/i.test(t));
+				if (!hasTeam) return;
+				const rows = $table.find('tbody tr');
+				if (rows.length === 0) return;
+				let numericCols = 0;
+				const firstRowTds = $2(rows[0]).find('td').map((___, td) => $2(td).text().trim()).get();
+				firstRowTds.forEach((txt: string) => {
+					const n = parseFloat(txt.replace(/[^\d.-]/g, ''));
+					if (!isNaN(n)) numericCols++;
+				});
+				if (numericCols >= 5) {
+					rows.each((__, tr) => {
+						const cells = $2(tr).find('td').map((___, td) => $2(td).text().trim()).get();
+						if (cells.length >= 2) {
+							plpgRows.push({ headerTexts, cells });
+						}
+					});
+					return false; // break
+				}
+			});
+			if (plpgRows.length === 0) {
+				throw new Error('Could not find Plays per Game table on page');
+			}
 		}
 
 		const plpgHeader = plpgRows[0].headerTexts.map((h: string) => h.toLowerCase());
@@ -166,16 +192,20 @@ export async function GET(request: Request) {
 			});
 		});
 
-		// Merge YPP upserts with PLPG metrics by team_name
-		const mergedUpserts = yppUpserts.map(row => {
-			const pl = plpgMap.get(row.team_name) || {};
-			return {
-				...row,
-				...pl,
-			};
-		});
+		// First upsert YPP so table gets populated even if PLPG parsing fails
+		const { error: yppError } = await supabase
+			.from('yards_per_play')
+			.upsert(yppUpserts, { onConflict: 'team_name,season' });
+		if (yppError) {
+			throw yppError;
+		}
 
-		// Upsert into Supabase (merged)
+		// Merge YPP with PLPG and upsert again to fill *_plpg (best effort)
+		const mergedUpserts = yppUpserts.map(row => ({
+			...row,
+			...(plpgMap.get(row.team_name) || {}),
+		}));
+
 		const { data, error } = await supabase
 			.from('yards_per_play')
 			.upsert(mergedUpserts, { onConflict: 'team_name,season' })
