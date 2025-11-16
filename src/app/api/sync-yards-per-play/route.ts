@@ -95,12 +95,12 @@ export async function GET(request: Request) {
 			return {
 				team_name: teamName,
 				season,
-				rank: idxRank >= 0 ? toNumber(cells[idxRank]) : null,
-				yards_per_play: idxSeasonCol >= 0 ? toNumber(cells[idxSeasonCol]) : null,
-				last_3: idxLast3 >= 0 ? toNumber(cells[idxLast3]) : null,
-				last_1: idxLast1 >= 0 ? toNumber(cells[idxLast1]) : null,
-				home: idxHome >= 0 ? toNumber(cells[idxHome]) : null,
-				away: idxAway >= 0 ? toNumber(cells[idxAway]) : null,
+				rank_ypp: idxRank >= 0 ? toNumber(cells[idxRank]) : null,
+				yards_per_play_ypp: idxSeasonCol >= 0 ? toNumber(cells[idxSeasonCol]) : null,
+				last_3_ypp: idxLast3 >= 0 ? toNumber(cells[idxLast3]) : null,
+				last_1_ypp: idxLast1 >= 0 ? toNumber(cells[idxLast1]) : null,
+				home_ypp: idxHome >= 0 ? toNumber(cells[idxHome]) : null,
+				away_ypp: idxAway >= 0 ? toNumber(cells[idxAway]) : null,
 				// Explicitly ignore 2024: we do not store it at all
 				source_url: 'https://www.teamrankings.com/nfl/stat/yards-per-play',
 			};
