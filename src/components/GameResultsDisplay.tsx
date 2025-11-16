@@ -19,6 +19,7 @@ interface GameResult {
     predicted_winner: string;
     predicted_spread: number;
     confidence_score: number;
+    value_score?: number;
     recommended_bet: string;
     reasoning: string;
     correct: boolean;
@@ -199,18 +200,38 @@ export function GameResultsDisplay() {
       {result && !loading && (
         <div className="space-y-3">
           {result.results.length > 0 ? (
-            // Filter to only games we made recommendations for, then sort: Bet of the Week first, then by date
+            // Filter to only games we made recommendations for, then sort: same order as spreads tab
             [...result.results]
               .filter((game) => {
                 // Only show games where we made a recommendation
                 return game.prediction && game.prediction.recommended_bet && game.prediction.recommended_bet !== 'none';
               })
               .sort((a, b) => {
+                // Same sorting logic as spreads tab: Bet of the Week first, then by confidence/value score
                 const aIsBetOfWeek = topPickGameIds.has(a.game_id || a.id);
                 const bIsBetOfWeek = topPickGameIds.has(b.game_id || b.id);
                 if (aIsBetOfWeek && !bIsBetOfWeek) return -1;
                 if (!aIsBetOfWeek && bIsBetOfWeek) return 1;
-                return new Date(b.game_date).getTime() - new Date(a.game_date).getTime();
+                
+                // Calculate sort_score same as spreads tab
+                const aValueScore = typeof a.prediction?.value_score === 'number' 
+                  ? a.prediction.value_score 
+                  : parseFloat(String(a.prediction?.value_score || 0));
+                const bValueScore = typeof b.prediction?.value_score === 'number' 
+                  ? b.prediction.value_score 
+                  : parseFloat(String(b.prediction?.value_score || 0));
+                const aConfidence = typeof a.prediction?.confidence_score === 'number' 
+                  ? a.prediction.confidence_score 
+                  : parseFloat(String(a.prediction?.confidence_score || 0));
+                const bConfidence = typeof b.prediction?.confidence_score === 'number' 
+                  ? b.prediction.confidence_score 
+                  : parseFloat(String(b.prediction?.confidence_score || 0));
+                
+                const aSortScore = aValueScore >= 4.0 ? (aConfidence + 10) : aConfidence;
+                const bSortScore = bValueScore >= 4.0 ? (bConfidence + 10) : bConfidence;
+                
+                // Sort descending by sort_score (highest first)
+                return bSortScore - aSortScore;
               })
               .map((game) => {
               const isBetOfWeek = topPickGameIds.has(game.game_id || game.id);

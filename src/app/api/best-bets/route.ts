@@ -75,7 +75,8 @@ export async function GET(request: Request) {
 					commence_time
 				)
 			`)
-			.gte('value_score', 1.3); // Only show picks with 1.3+ edge
+			.gte('value_score', 1.3) // Only show picks with 1.3+ edge
+			.neq('recommended_bet', 'none'); // Only show actual recommendations
 		
 		if (week) query = query.eq('week_number', week);
 		if (season) query = query.eq('season', season);

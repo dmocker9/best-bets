@@ -56,7 +56,7 @@ export function BestBetsDisplay() {
   const [result, setResult] = useState<BestBetsResponse | null>(null);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [showGlossary, setShowGlossary] = useState(false);
-  const [selectedWeek, setSelectedWeek] = useState<number>(11);
+  const [selectedWeek, setSelectedWeek] = useState<number>(10);
   const [selectedSeason, setSelectedSeason] = useState<number>(2025);
 
   const fetchBestBets = useCallback(async () => {

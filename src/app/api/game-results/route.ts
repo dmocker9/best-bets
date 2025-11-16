@@ -410,6 +410,7 @@ export async function GET(request: Request) {
           predicted_winner: prediction.predicted_winner,
           predicted_spread: prediction.predicted_spread,
           confidence_score: prediction.confidence_score,
+          value_score: prediction.value_score,
           recommended_bet: prediction.recommended_bet,
           reasoning: prediction.reasoning,
           correct: predictionCorrect,
